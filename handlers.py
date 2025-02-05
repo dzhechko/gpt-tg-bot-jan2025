@@ -980,7 +980,7 @@ async def manage_users_command(update: Update, context: ContextTypes.DEFAULT_TYP
 @admin_required
 async def manage_groups_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Управление списком разрешенных групп."""
-    if len(context.args) < 1:
+    if not context.args:
         await update.message.reply_text(
             "Используйте:\n"
             "/addgroup ID - добавить группу\n"
@@ -988,18 +988,28 @@ async def manage_groups_command(update: Update, context: ContextTypes.DEFAULT_TY
             "/listgroups - показать список групп"
         )
         return
+
+    command = update.message.text.split()[0][1:]  # Получаем имя команды без /
     
-    action = context.args[0].lower()
-    
-    if action not in ["add", "remove", "list"] and len(context.args) < 2:
-        await update.message.reply_text("❌ Не указан ID группы")
-        return
-    
+    # Получаем список разрешенных групп
     allowed_groups = os.getenv('ALLOWED_GROUPS', '').split(',')
     allowed_groups = [g.strip() for g in allowed_groups if g.strip()]
     
-    if action == "add" and len(context.args) >= 2:
-        group_id = context.args[1]
+    if command == "listgroups":
+        if not allowed_groups:
+            await update.message.reply_text("📋 Список разрешенных групп пуст")
+        else:
+            groups_list = "📋 Список разрешенных групп:\n\n" + "\n".join(allowed_groups)
+            await update.message.reply_text(groups_list)
+        return
+    
+    if len(context.args) < 1:
+        await update.message.reply_text("❌ Не указан ID группы")
+        return
+        
+    group_id = context.args[0]
+    
+    if command == "addgroup":
         if not group_id.startswith('-100'):
             await update.message.reply_text("❌ ID группы должен начинаться с -100")
             return
@@ -1011,8 +1021,7 @@ async def manage_groups_command(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             await update.message.reply_text("ℹ️ Эта группа уже в списке разрешенных")
     
-    elif action == "remove" and len(context.args) >= 2:
-        group_id = context.args[1]
+    elif command == "removegroup":
         if group_id in allowed_groups:
             allowed_groups.remove(group_id)
             os.environ['ALLOWED_GROUPS'] = ','.join(allowed_groups)
@@ -1020,14 +1029,8 @@ async def manage_groups_command(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             await update.message.reply_text("ℹ️ Этой группы нет в списке разрешенных")
     
-    elif action == "list":
-        if not allowed_groups:
-            await update.message.reply_text("📋 Список разрешенных групп пуст")
-        else:
-            groups_list = "📋 Список разрешенных групп:\n\n" + "\n".join(allowed_groups)
-            await update.message.reply_text(groups_list)
     else:
-        await update.message.reply_text("❌ Неизвестное действие")
+        await update.message.reply_text("❌ Неизвестная команда")
 
 @admin_required
 async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
