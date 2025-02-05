@@ -19,13 +19,13 @@ else:
 
 class TextModelSettings(BaseModel):
     base_url: str = "https://api.openai.com/v1"
-    model: str = "gpt-3.5-turbo"
+    model: str = "gpt-4o-mini"
     temperature: float = 0.7
     max_tokens: int = 1000
 
     @property
     def available_models(self):
-        return ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo", "claude-3-sonnet"]
+        return ["gpt-4o-mini", "gpt-4o", "gpt-4", "claude-3-sonnet"]
 
 class ImageModelSettings(BaseModel):
     base_url: str = "https://api.openai.com/v1"

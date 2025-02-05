@@ -6,6 +6,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters
 )
+from telegram.error import RetryAfter, TimedOut, NetworkError, Conflict, BadRequest
 from openai import OpenAI
 import os
 from loguru import logger
@@ -19,7 +20,9 @@ from handlers import (
     handle_image,
     handle_settings_callback,
     handle_text_model_settings,
-    handle_image_model_settings
+    handle_image_model_settings,
+    show_current_settings_command,
+    handle_image_command
 )
 from settings import SettingsManager
 
@@ -55,12 +58,14 @@ class GPTBot:
         else:
             logger.add("production.log", rotation="500 MB", level="INFO")
 
-        # Создаем приложение и получаем бота из него
+        # Создаем приложение
         self.application = Application.builder().token(self.token).build()
-        self.telegram_bot = self.application.bot
         
         # Регистрируем обработчики
         self._setup_handlers()
+        
+        # Регистрируем обработчик ошибок
+        self.application.add_error_handler(self._error_handler)
 
     def _setup_handlers(self):
         """Настройка обработчиков команд и сообщений."""
@@ -69,6 +74,8 @@ class GPTBot:
         self.application.add_handler(CommandHandler('help', help_command))
         self.application.add_handler(CommandHandler('settings', settings_command))
         self.application.add_handler(CommandHandler('clear', clear_command))
+        self.application.add_handler(CommandHandler('current_settings', show_current_settings_command))
+        self.application.add_handler(CommandHandler(['image', 'img'], handle_image_command))
 
         # Добавляем обработчики сообщений
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
@@ -87,6 +94,25 @@ class GPTBot:
             handle_image_model_settings,
             pattern='^(change_image_model|set_image_model_.*|change_size|set_size_.*|toggle_hdr)$'
         ))
+
+    async def _error_handler(self, update: Update, context):
+        """Обработчик ошибок."""
+        try:
+            raise context.error
+        except Conflict:
+            logger.warning("Конфликт при получении обновлений. Возможно, запущено несколько экземпляров бота.")
+        except BadRequest as e:
+            if "Message is not modified" in str(e):
+                # Игнорируем эту ошибку, так как она не влияет на функциональность
+                pass
+            else:
+                logger.error(f"Ошибка BadRequest: {e}")
+        except (TimedOut, NetworkError):
+            logger.warning("Временная ошибка сети")
+        except RetryAfter as e:
+            logger.warning(f"Превышен лимит запросов, ожидаем {e.retry_after} секунд")
+        except Exception as e:
+            logger.error(f"Необработанная ошибка: {e}")
 
     async def stream_chat_completion(self, messages, chat_id, message_id, context):
         """
@@ -114,6 +140,7 @@ class GPTBot:
 
             # Буфер для накопления частей ответа
             response_buffer = ""
+            last_update = ""  # Сохраняем последнее отправленное сообщение
             update_counter = 0  # Счетчик для обновлений
             
             # Обрабатываем поток ответов
@@ -126,19 +153,23 @@ class GPTBot:
                     # Обновляем сообщение каждые 5 чанков или если есть новая строка
                     if update_counter >= 5 or '\n' in content:
                         try:
-                            await self.telegram_bot.edit_message_text(
-                                chat_id=chat_id,
-                                message_id=message_id,
-                                text=response_buffer
-                            )
-                            update_counter = 0  # Сбрасываем счетчик
-                        except Exception as e:
-                            logger.debug(f"Ошибка при обновлении сообщения: {e}")
+                            # Проверяем, изменилось ли сообщение
+                            if response_buffer != last_update:
+                                await self.application.bot.edit_message_text(
+                                    chat_id=chat_id,
+                                    message_id=message_id,
+                                    text=response_buffer
+                                )
+                                last_update = response_buffer
+                            update_counter = 0
+                        except BadRequest as e:
+                            if "Message is not modified" not in str(e):
+                                logger.debug(f"Ошибка при обновлении сообщения: {e}")
 
             # Отправляем финальное обновление
-            if response_buffer:
+            if response_buffer and response_buffer != last_update:
                 try:
-                    await self.telegram_bot.edit_message_text(
+                    await self.application.bot.edit_message_text(
                         chat_id=chat_id,
                         message_id=message_id,
                         text=response_buffer
@@ -150,12 +181,13 @@ class GPTBot:
                         "content": response_buffer
                     })
                     settings_manager.save_settings()
-                except Exception as e:
-                    logger.debug(f"Ошибка при финальном обновлении: {e}")
+                except BadRequest as e:
+                    if "Message is not modified" not in str(e):
+                        logger.debug(f"Ошибка при финальном обновлении: {e}")
 
         except Exception as e:
             logger.error(f"Ошибка при получении ответа от OpenAI: {e}")
-            await self.telegram_bot.edit_message_text(
+            await self.application.bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=message_id,
                 text="Произошла ошибка при получении ответа. Пожалуйста, попробуйте позже."
@@ -193,7 +225,11 @@ class GPTBot:
             
             # Запускаем бота
             logger.info("Бот запущен")
-            self.application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+            self.application.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True,
+                close_loop=False
+            )
         except Exception as e:
             logger.error(f"Ошибка при запуске бота: {e}")
             raise 

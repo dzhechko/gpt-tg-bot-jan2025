@@ -44,8 +44,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "🎨 Работа с изображениями:\n"
         "- Отправьте изображение с описанием\n"
         "- Или просто текст для генерации изображения\n\n"
-        "⚙️ Настройки:\n"
+        "⚙️ Настройки и команды:\n"
         "/settings - открыть меню настроек\n"
+        "/current_settings - показать текущие настройки\n"
         "/clear - очистить историю сообщений\n\n"
         "❓ Дополнительно:\n"
         "- Поддерживаю работу в группах\n"
@@ -72,6 +73,26 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "очистить историю сообщений",
         "clear_history"
     )
+
+@log_handler_call
+async def show_current_settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик команды /current_settings."""
+    user_id = update.effective_user.id
+    settings = settings_manager.get_user_settings(user_id)
+    
+    text = "📊 Текущие настройки:\n\n"
+    text += "📝 Текстовая модель:\n"
+    text += f"- Модель: {settings.text_settings.model}\n"
+    text += f"- Температура: {settings.text_settings.temperature}\n"
+    text += f"- Макс. токенов: {settings.text_settings.max_tokens}\n\n"
+    text += "🎨 Модель изображений:\n"
+    text += f"- Модель: {settings.image_settings.model}\n"
+    text += f"- Размер: {settings.image_settings.size}\n"
+    text += f"- Качество: {settings.image_settings.quality}\n"
+    text += f"- Стиль: {settings.image_settings.style}\n"
+    text += f"- HDR: {'Вкл' if settings.image_settings.hdr else 'Выкл'}"
+    
+    await update.message.reply_text(text)
 
 # Обработчики текста и изображений
 @log_handler_call
@@ -113,6 +134,58 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
 
 @log_handler_call
+async def handle_image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик команд /image и /img."""
+    user_id = update.effective_user.id
+    settings = settings_manager.get_user_settings(user_id)
+    
+    # Получаем текст после команды
+    command_parts = update.message.text.split(maxsplit=1)
+    if len(command_parts) < 2:
+        await update.message.reply_text(
+            "Пожалуйста, добавьте описание желаемого изображения после команды.\n"
+            "Например: /image нарисуй красивый закат на море"
+        )
+        return
+    
+    prompt = command_parts[1]
+    
+    try:
+        # Отправляем начальное сообщение
+        initial_message = await update.message.reply_text(
+            "🎨 Генерирую изображение..."
+        )
+        
+        # Получаем экземпляр GPTBot из контекста
+        gpt_bot = context.application.bot_data['gpt_bot']
+        
+        # Генерируем изображение
+        image_url = await gpt_bot.create_image(
+            prompt=prompt,
+            model=settings.image_settings.model,
+            size=settings.image_settings.size,
+            quality=settings.image_settings.quality,
+            style=settings.image_settings.style,
+            hdr=settings.image_settings.hdr
+        )
+        
+        # Отправляем изображение
+        await context.bot.delete_message(
+            chat_id=update.effective_chat.id,
+            message_id=initial_message.message_id
+        )
+        await update.message.reply_photo(
+            photo=image_url,
+            caption=f"🎨 Сгенерировано по запросу: {prompt}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка при генерации изображения: {e}")
+        await update.message.reply_text(
+            "Произошла ошибка при генерации изображения. Пожалуйста, попробуйте позже."
+        )
+
+@log_handler_call
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик изображений."""
     user_id = update.effective_user.id
@@ -122,11 +195,50 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     image = update.message.photo[-1]
     caption = update.message.caption or ""
     
-    # TODO: Реализовать обработку изображений
-    # Пока просто заглушка
-    await update.message.reply_text(
-        "Извините, функция обработки изображений временно недоступна."
-    )
+    if not caption:
+        await update.message.reply_text(
+            "Пожалуйста, добавьте описание желаемых изменений в подписи к изображению."
+        )
+        return
+    
+    try:
+        # Отправляем начальное сообщение
+        initial_message = await update.message.reply_text(
+            "🎨 Обрабатываю изображение..."
+        )
+        
+        # Получаем экземпляр GPTBot из контекста
+        gpt_bot = context.application.bot_data['gpt_bot']
+        
+        # Получаем файл изображения
+        file = await context.bot.get_file(image.file_id)
+        
+        # Генерируем новое изображение на основе существующего
+        image_url = await gpt_bot.create_image(
+            prompt=caption,
+            model=settings.image_settings.model,
+            size=settings.image_settings.size,
+            quality=settings.image_settings.quality,
+            style=settings.image_settings.style,
+            hdr=settings.image_settings.hdr,
+            reference_image_url=file.file_path
+        )
+        
+        # Отправляем новое изображение
+        await context.bot.delete_message(
+            chat_id=update.effective_chat.id,
+            message_id=initial_message.message_id
+        )
+        await update.message.reply_photo(
+            photo=image_url,
+            caption=f"🎨 Изображение изменено согласно описанию: {caption}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка при обработке изображения: {e}")
+        await update.message.reply_text(
+            "Произошла ошибка при обработке изображения. Пожалуйста, попробуйте позже."
+        )
 
 # Обработчики callback'ов
 @log_handler_call
