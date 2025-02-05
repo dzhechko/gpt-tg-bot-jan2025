@@ -11,19 +11,26 @@ load_dotenv()
 # Инициализация логгера
 logger = setup_logger()
 
-# Глобальная переменная для хранения экземпляра бота
-bot = None
-
-async def shutdown(signal, loop):
+async def shutdown(loop, bot=None):
     """Корректное завершение работы бота."""
-    logger.info(f"Получен сигнал {signal.name}...")
+    logger.info("Начало процедуры завершения работы...")
+    
+    if bot and bot.application:
+        try:
+            if bot.application.running:
+                await bot.application.stop()
+            await bot.application.shutdown()
+        except Exception as e:
+            logger.error(f"Ошибка при остановке бота: {str(e)}")
+
     tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    if tasks:
+        logger.info(f"Отмена {len(tasks)} задач...")
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
-    for task in tasks:
-        task.cancel()
-
-    logger.info(f"Отмена {len(tasks)} задач...")
-    await asyncio.gather(*tasks, return_exceptions=True)
+    logger.info("Завершение работы...")
     loop.stop()
 
 def handle_exception(loop, context):
@@ -36,39 +43,36 @@ async def main():
     Основная функция для запуска бота.
     Инициализирует и запускает бота с настройками из переменных окружения.
     """
-    global bot
+    bot = None
+    loop = asyncio.get_running_loop()
     
-    # Получаем токен из переменных окружения
-    token = os.getenv('TELEGRAM_BOT_TOKEN')
-    if not token:
-        logger.error("Не найден токен бота. Убедитесь, что переменная TELEGRAM_BOT_TOKEN установлена.")
-        return
-
     try:
-        # Настройка обработки сигналов
-        loop = asyncio.get_running_loop()
+        # Получаем токен из переменных окружения
+        token = os.getenv('TELEGRAM_BOT_TOKEN')
+        if not token:
+            logger.error("Не найден токен бота. Убедитесь, что переменная TELEGRAM_BOT_TOKEN установлена.")
+            return
+
+        # Настройка обработки исключений
         loop.set_exception_handler(handle_exception)
-        signals = (signal.SIGTERM, signal.SIGINT)
-        for s in signals:
+
+        # Настройка обработки сигналов
+        for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(
-                s, lambda s=s: asyncio.create_task(shutdown(s, loop))
+                sig,
+                lambda s=sig: asyncio.create_task(shutdown(loop, bot))
             )
 
         # Создаем и запускаем бота
         bot = TelegramBot(token)
         logger.info("Бот успешно инициализирован")
-        
-        # Запускаем бота и ждем завершения
         await bot.run()
-        
+
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {str(e)}")
-        if bot and bot.application:
-            try:
-                await bot.application.stop()
-                await bot.application.shutdown()
-            except Exception as shutdown_error:
-                logger.error(f"Ошибка при остановке бота: {str(shutdown_error)}")
+    finally:
+        if loop.is_running():
+            await shutdown(loop, bot)
 
 if __name__ == '__main__':
     try:
