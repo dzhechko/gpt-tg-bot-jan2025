@@ -1,4 +1,5 @@
 import os
+import asyncio
 from dotenv import load_dotenv
 from logger import setup_logger
 from bot import TelegramBot
@@ -9,7 +10,7 @@ load_dotenv()
 # Инициализация логгера
 logger = setup_logger()
 
-def main():
+async def main():
     """
     Основная функция для запуска бота.
     Инициализирует и запускает бота с настройками из переменных окружения.
@@ -24,9 +25,9 @@ def main():
         # Создаем и запускаем бота
         bot = TelegramBot(token)
         logger.info("Бот успешно инициализирован и запущен")
-        bot.run()
+        await bot.application.run_polling()
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {str(e)}")
 
 if __name__ == '__main__':
-    main() 
+    asyncio.run(main()) 

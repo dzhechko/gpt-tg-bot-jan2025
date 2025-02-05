@@ -1,7 +1,8 @@
 import os
 from openai import OpenAI
-from telegram import Update, ParseMode
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
+from telegram import Update
+from telegram.constants import ParseMode
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from settings import TextModelSettings, ImageModelSettings, VoiceModelSettings
 from handlers import handle_message, handle_callback, handle_command
 from media_handlers import MediaHandler
@@ -16,8 +17,8 @@ class TelegramBot:
         Args:
             token (str): Токен Telegram бота
         """
-        self.updater = Updater(token=token, use_context=True)
-        self.dp = self.updater.dispatcher
+        # Создаем приложение
+        self.application = Application.builder().token(token).build()
         
         # Инициализация OpenAI клиента
         self.openai_client = OpenAI(
@@ -39,37 +40,37 @@ class TelegramBot:
     def _setup_handlers(self):
         """Настройка обработчиков команд и сообщений."""
         # Команды
-        self.dp.add_handler(CommandHandler("start", self._start_command))
-        self.dp.add_handler(CommandHandler("settings", self._settings_command))
-        self.dp.add_handler(CommandHandler("clear_history", self._clear_history_command))
+        self.application.add_handler(CommandHandler("start", self._start_command))
+        self.application.add_handler(CommandHandler("settings", self._settings_command))
+        self.application.add_handler(CommandHandler("clear_history", self._clear_history_command))
         
         # Callback-запросы
-        self.dp.add_handler(CallbackQueryHandler(self._button_callback))
+        self.application.add_handler(CallbackQueryHandler(self._button_callback))
         
         # Медиа-сообщения
-        self.dp.add_handler(MessageHandler(Filters.voice, self._handle_voice))
-        self.dp.add_handler(MessageHandler(Filters.photo, self._handle_image))
+        self.application.add_handler(MessageHandler(filters.VOICE, self._handle_voice))
+        self.application.add_handler(MessageHandler(filters.PHOTO, self._handle_image))
         
         # Текстовые сообщения (должны обрабатываться последними)
-        self.dp.add_handler(MessageHandler(Filters.text & ~Filters.command, self._handle_message))
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_message))
 
-    async def _start_command(self, update: Update, context: CallbackContext):
+    async def _start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /start."""
         await handle_command(update, context, 'start')
 
-    async def _settings_command(self, update: Update, context: CallbackContext):
+    async def _settings_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /settings."""
         await handle_command(update, context, 'settings')
 
-    async def _clear_history_command(self, update: Update, context: CallbackContext):
+    async def _clear_history_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /clear_history."""
         await handle_command(update, context, 'clear_history')
 
-    async def _button_callback(self, update: Update, context: CallbackContext):
+    async def _button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик нажатий кнопок."""
         await handle_callback(update, context)
 
-    async def _handle_message(self, update: Update, context: CallbackContext):
+    async def _handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик текстовых сообщений."""
         # Проверяем, не является ли это описанием для изображения
         if context.user_data.get('image_processing'):
@@ -77,11 +78,11 @@ class TelegramBot:
         else:
             await handle_message(update, context)
 
-    async def _handle_voice(self, update: Update, context: CallbackContext):
+    async def _handle_voice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик голосовых сообщений."""
         await self.media_handler.handle_voice(update, context)
 
-    async def _handle_image(self, update: Update, context: CallbackContext):
+    async def _handle_image(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик изображений."""
         await self.media_handler.handle_image(update, context)
 
@@ -189,5 +190,4 @@ class TelegramBot:
 
     def run(self):
         """Запуск бота в режиме polling."""
-        self.updater.start_polling()
-        self.updater.idle() 
+        self.application.run_polling() 
