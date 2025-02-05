@@ -17,28 +17,53 @@ def check_user_access(user_id: int) -> bool:
     Returns:
         bool: True если пользователь имеет доступ, False в противном случае
     """
-    allowed_users = os.getenv('ALLOWED_USERS', '').strip()
+    allowed_users = os.getenv('ALLOWED_USERS')
     
-    # Если список разрешенных пользователей пуст, разрешаем доступ всем
+    # Если переменная ALLOWED_USERS не задана или пустая, запрещаем доступ
     if not allowed_users:
-        return True
+        logger.warning(f"Переменная ALLOWED_USERS не задана. Доступ запрещен для пользователя {user_id}")
+        return False
     
-    # Преобразуем строку с ID в список чисел
-    allowed_ids = [int(uid.strip()) for uid in allowed_users.split(',') if uid.strip().isdigit()]
-    
-    # Проверяем наличие ID пользователя в списке разрешенных
-    return user_id in allowed_ids
+    try:
+        # Преобразуем строку с ID в список чисел
+        allowed_ids = [int(uid.strip()) for uid in allowed_users.split(',') if uid.strip().isdigit()]
+        
+        # Если список пустой после обработки, запрещаем доступ
+        if not allowed_ids:
+            logger.warning("Список ALLOWED_USERS пуст или содержит некорректные значения")
+            return False
+        
+        # Проверяем наличие ID пользователя в списке разрешенных
+        has_access = user_id in allowed_ids
+        if not has_access:
+            logger.warning(f"Попытка доступа от неразрешенного пользователя {user_id}")
+        return has_access
+        
+    except Exception as e:
+        logger.error(f"Ошибка при проверке доступа: {e}")
+        return False
 
 def check_user_access_decorator(func):
     """Декоратор для проверки доступа пользователя к командам бота."""
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
+        
+        # Список команд, доступных всем пользователям
+        public_commands = ['myid_command', 'help_command']
+        
+        # Если это публичная команда, разрешаем доступ
+        if func.__name__ in public_commands:
+            return await func(update, context, *args, **kwargs)
+        
+        # Для остальных команд проверяем доступ
         if check_user_access(user_id):
             return await func(update, context, *args, **kwargs)
         else:
             logger.warning(f"Попытка несанкционированного доступа от пользователя {user_id}")
             await update.message.reply_text(
-                "⛔️ У вас нет доступа к этому боту. Пожалуйста, свяжитесь с администратором."
+                "⛔️ У вас нет доступа к этому боту.\n\n"
+                "Используйте /help для получения информации или /myid чтобы узнать свой Telegram ID.\n\n"
+                "Для получения доступа свяжитесь с администратором: @djdim"
             )
             return None
     return wrapper
