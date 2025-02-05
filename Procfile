@@ -1,1 +1,1 @@
-web: source /opt/venv/bin/activate && python3.11 main.py 
+web: . /opt/venv/bin/activate && exec python3.11 main.py 
