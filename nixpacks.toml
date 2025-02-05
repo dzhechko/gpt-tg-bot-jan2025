@@ -4,7 +4,7 @@ nixPkgs = [
     "espeak-ng",
     "gcc",
     "pkg-config",
-    "python311",
+    "python311Full",
     "python311Packages.pip",
     "python311Packages.setuptools",
     "python311Packages.wheel"
@@ -12,7 +12,8 @@ nixPkgs = [
 
 [phases.install]
 cmds = [
-    "python3.11 -m pip install --upgrade pip setuptools wheel",
+    "curl -sSL https://bootstrap.pypa.io/get-pip.py -o get-pip.py",
+    "python3.11 get-pip.py",
     "python3.11 -m pip install -r requirements.txt"
 ]
 
