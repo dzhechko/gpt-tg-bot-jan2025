@@ -326,8 +326,9 @@ async def handle_text_model_settings(update: Update, context: ContextTypes.DEFAU
     
     if query.data == "change_text_model":
         models = settings.text_settings.available_models
-        buttons = [[InlineKeyboardButton(model, callback_data=f"set_text_model_{model}")] 
-                  for model in models]
+        current_model = settings.text_settings.effective_model
+        buttons = [[InlineKeyboardButton(f"{model} {'✓' if model == current_model else ''}", 
+                   callback_data=f"set_text_model_{model}")] for model in models]
         buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="text_settings")])
         keyboard = InlineKeyboardMarkup(buttons)
         await query.edit_message_text(
@@ -358,10 +359,10 @@ async def handle_text_model_settings(update: Update, context: ContextTypes.DEFAU
             )
     
     elif query.data == "change_temperature":
-        # Создаем кнопки для выбора температуры
         temp_values = ["0.0", "0.3", "0.5", "0.7", "1.0", "1.5", "2.0"]
-        buttons = [[InlineKeyboardButton(f"🌡 {temp}", callback_data=f"set_temp_{temp}")] 
-                  for temp in temp_values]
+        current_temp = str(settings.text_settings.temperature)
+        buttons = [[InlineKeyboardButton(f"🌡 {temp} {'✓' if temp == current_temp else ''}", 
+                   callback_data=f"set_temp_{temp}")] for temp in temp_values]
         buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="text_settings")])
         keyboard = InlineKeyboardMarkup(buttons)
         await query.edit_message_text(
@@ -382,10 +383,10 @@ async def handle_text_model_settings(update: Update, context: ContextTypes.DEFAU
         )
     
     elif query.data == "change_max_tokens":
-        # Создаем кнопки для выбора максимального количества токенов
         token_values = ["500", "1000", "2000", "3000", "4000"]
-        buttons = [[InlineKeyboardButton(f"📊 {tokens}", callback_data=f"set_tokens_{tokens}")] 
-                  for token in token_values]
+        current_tokens = str(settings.text_settings.max_tokens)
+        buttons = [[InlineKeyboardButton(f"📊 {token} {'✓' if token == current_tokens else ''}", 
+                   callback_data=f"set_tokens_{token}")] for token in token_values]
         buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="text_settings")])
         keyboard = InlineKeyboardMarkup(buttons)
         await query.edit_message_text(
@@ -453,8 +454,9 @@ async def handle_image_model_settings(update: Update, context: ContextTypes.DEFA
     
     if query.data == "change_image_model":
         models = settings.image_settings.available_models
-        buttons = [[InlineKeyboardButton(model, callback_data=f"set_image_model_{model}")] 
-                  for model in models]
+        current_model = settings.image_settings.model
+        buttons = [[InlineKeyboardButton(f"{model} {'✓' if model == current_model else ''}", 
+                   callback_data=f"set_image_model_{model}")] for model in models]
         buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="image_settings")])
         keyboard = InlineKeyboardMarkup(buttons)
         await query.edit_message_text(
@@ -473,8 +475,9 @@ async def handle_image_model_settings(update: Update, context: ContextTypes.DEFA
     
     elif query.data == "change_size":
         sizes = settings.image_settings.available_sizes
-        buttons = [[InlineKeyboardButton(size, callback_data=f"set_size_{size}")] 
-                  for size in sizes]
+        current_size = settings.image_settings.size
+        buttons = [[InlineKeyboardButton(f"{size} {'✓' if size == current_size else ''}", 
+                   callback_data=f"set_size_{size}")] for size in sizes]
         buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="image_settings")])
         keyboard = InlineKeyboardMarkup(buttons)
         await query.edit_message_text(
@@ -496,8 +499,9 @@ async def handle_image_model_settings(update: Update, context: ContextTypes.DEFA
     
     elif query.data == "change_quality":
         qualities = settings.image_settings.available_qualities
-        buttons = [[InlineKeyboardButton(quality, callback_data=f"set_quality_{quality}")] 
-                  for quality in qualities]
+        current_quality = settings.image_settings.quality
+        buttons = [[InlineKeyboardButton(f"{quality} {'✓' if quality == current_quality else ''}", 
+                   callback_data=f"set_quality_{quality}")] for quality in qualities]
         buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="image_settings")])
         keyboard = InlineKeyboardMarkup(buttons)
         await query.edit_message_text(
@@ -518,8 +522,9 @@ async def handle_image_model_settings(update: Update, context: ContextTypes.DEFA
     
     elif query.data == "change_style":
         styles = settings.image_settings.available_styles
-        buttons = [[InlineKeyboardButton(style, callback_data=f"set_style_{style}")] 
-                  for style in styles]
+        current_style = settings.image_settings.style
+        buttons = [[InlineKeyboardButton(f"{style} {'✓' if style == current_style else ''}", 
+                   callback_data=f"set_style_{style}")] for style in styles]
         buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="image_settings")])
         keyboard = InlineKeyboardMarkup(buttons)
         await query.edit_message_text(
