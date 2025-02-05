@@ -55,6 +55,38 @@ class GPTBot:
         else:
             logger.add("production.log", rotation="500 MB", level="INFO")
 
+        # Создаем приложение
+        self.application = Application.builder().token(self.token).build()
+        
+        # Регистрируем обработчики
+        self._setup_handlers()
+
+    def _setup_handlers(self):
+        """Настройка обработчиков команд и сообщений."""
+        # Добавляем обработчики команд
+        self.application.add_handler(CommandHandler('start', start_command))
+        self.application.add_handler(CommandHandler('help', help_command))
+        self.application.add_handler(CommandHandler('settings', settings_command))
+        self.application.add_handler(CommandHandler('clear', clear_command))
+
+        # Добавляем обработчики сообщений
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+        self.application.add_handler(MessageHandler(filters.PHOTO, handle_image))
+
+        # Добавляем обработчики callback'ов
+        self.application.add_handler(CallbackQueryHandler(
+            handle_settings_callback,
+            pattern='^(text_settings|image_settings|clear_history|export_settings|import_settings|close_settings|back_to_main|confirm_.*|cancel_confirmation)$'
+        ))
+        self.application.add_handler(CallbackQueryHandler(
+            handle_text_model_settings,
+            pattern='^(change_text_model|set_text_model_.*)$'
+        ))
+        self.application.add_handler(CallbackQueryHandler(
+            handle_image_model_settings,
+            pattern='^(change_image_model|set_image_model_.*|change_size|set_size_.*|toggle_hdr)$'
+        ))
+
     async def stream_chat_completion(self, messages, chat_id, message_id, context):
         """
         Отправка потокового ответа от модели GPT.
@@ -140,38 +172,12 @@ class GPTBot:
     def run(self):
         """Запуск бота."""
         try:
-            # Создаем приложение
-            application = Application.builder().token(self.token).build()
-            
             # Устанавливаем себя как свойство приложения
-            application.bot = self
-
-            # Добавляем обработчики команд
-            application.add_handler(CommandHandler('start', start_command))
-            application.add_handler(CommandHandler('help', help_command))
-            application.add_handler(CommandHandler('settings', settings_command))
-            application.add_handler(CommandHandler('clear', clear_command))
-
-            # Добавляем обработчики сообщений
-            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-            application.add_handler(MessageHandler(filters.PHOTO, handle_image))
-
-            # Добавляем обработчики callback'ов
-            application.add_handler(CallbackQueryHandler(
-                handle_settings_callback,
-                pattern='^(text_settings|image_settings|clear_history|export_settings|import_settings|close_settings|back_to_main|confirm_.*|cancel_confirmation)$'
-            ))
-            application.add_handler(CallbackQueryHandler(
-                handle_text_model_settings,
-                pattern='^(change_text_model|set_text_model_.*)$'
-            ))
-            application.add_handler(CallbackQueryHandler(
-                handle_image_model_settings,
-                pattern='^(change_image_model|set_image_model_.*|change_size|set_size_.*|toggle_hdr)$'
-            ))
-
+            self.application.bot = self
+            
             # Запускаем бота
             logger.info("Бот запущен")
-            application.run_polling()
+            self.application.run_polling()
         except Exception as e:
-            logger.error(f"Ошибка при запуске бота: {e}") 
+            logger.error(f"Ошибка при запуске бота: {e}")
+            raise 
