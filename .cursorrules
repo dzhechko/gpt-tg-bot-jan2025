@@ -1,0 +1,5 @@
+Please use Russian language for all user menu options
+Telegram bot should use polling logic
+always provide enhanced logging end debugging which can be turned on and off by changing the value of a variable DEBUG (true / false)
+Keep in mind that this telegram bot will be deployed on railway.app platform, so include in the project all files related to this (like railway.json, ProcFile and etc)
+think carefully step by step
