@@ -4,6 +4,7 @@ import signal
 from dotenv import load_dotenv
 from logger import setup_logger
 from bot import TelegramBot
+import sys
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -11,7 +12,7 @@ load_dotenv()
 # Инициализация логгера
 logger = setup_logger()
 
-async def shutdown(loop, bot=None):
+async def shutdown(bot=None):
     """Корректное завершение работы бота."""
     logger.info("Начало процедуры завершения работы...")
     
@@ -23,15 +24,19 @@ async def shutdown(loop, bot=None):
         except Exception as e:
             logger.error(f"Ошибка при остановке бота: {str(e)}")
 
-    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-    if tasks:
-        logger.info(f"Отмена {len(tasks)} задач...")
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+    # Отменяем все оставшиеся задачи
+    try:
+        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        if tasks:
+            logger.info(f"Отмена {len(tasks)} задач...")
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+    except Exception as e:
+        logger.error(f"Ошибка при отмене задач: {str(e)}")
 
     logger.info("Завершение работы...")
-    loop.stop()
 
 def handle_exception(loop, context):
     """Обработка необработанных исключений."""
@@ -44,7 +49,6 @@ async def main():
     Инициализирует и запускает бота с настройками из переменных окружения.
     """
     bot = None
-    loop = asyncio.get_running_loop()
     
     try:
         # Получаем токен из переменных окружения
@@ -54,35 +58,36 @@ async def main():
             return
 
         # Настройка обработки исключений
+        loop = asyncio.get_running_loop()
         loop.set_exception_handler(handle_exception)
 
         # Настройка обработки сигналов
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(
                 sig,
-                lambda s=sig: asyncio.create_task(shutdown(loop, bot))
+                lambda: asyncio.create_task(shutdown(bot))
             )
 
         # Создаем и запускаем бота
         bot = TelegramBot(token)
         logger.info("Бот успешно инициализирован")
+        
+        # Запускаем бота и ждем его завершения
         await bot.run()
 
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {str(e)}")
-    finally:
-        if loop.is_running():
-            await shutdown(loop, bot)
+        if bot:
+            await shutdown(bot)
+        return 1
+    return 0
 
 if __name__ == '__main__':
     try:
-        asyncio.run(main())
+        exit_code = asyncio.run(main())
+        sys.exit(exit_code)
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем")
     except Exception as e:
         logger.error(f"Критическая ошибка: {str(e)}")
-    finally:
-        # Ensure all tasks are properly cleaned up
-        pending = asyncio.all_tasks()
-        for task in pending:
-            task.cancel() 
+        sys.exit(1) 

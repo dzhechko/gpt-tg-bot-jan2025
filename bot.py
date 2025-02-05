@@ -209,10 +209,16 @@ class TelegramBot:
                 await self.application.initialize()
                 await self.application.start()
                 logger.info("Бот запущен и ожидает сообщений...")
-                await self.application.run_polling(allowed_updates=Update.ALL_TYPES)
+                await self.application.run_polling(
+                    allowed_updates=Update.ALL_TYPES,
+                    close_loop=False
+                )
         except Exception as e:
             logger.error(f"Ошибка при запуске бота: {str(e)}")
             if self.application.running:
-                await self.application.stop()
-            await self.application.shutdown()
+                try:
+                    await self.application.stop()
+                    await self.application.shutdown()
+                except Exception as shutdown_error:
+                    logger.error(f"Ошибка при остановке бота: {str(shutdown_error)}")
             raise 
