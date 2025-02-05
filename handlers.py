@@ -977,9 +977,46 @@ async def manage_users_command(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         await update.message.reply_text("❌ Неизвестное действие") 
 
+def load_groups() -> list:
+    """Загружает список разрешенных групп из файла."""
+    try:
+        if os.path.exists('allowed_groups.json'):
+            with open('allowed_groups.json', 'r') as f:
+                return json.load(f)
+        return []
+    except Exception as e:
+        logger.error(f"Ошибка при загрузке списка групп: {e}")
+        return []
+
+def save_groups(groups: list) -> None:
+    """Сохраняет список разрешенных групп в файл."""
+    try:
+        with open('allowed_groups.json', 'w') as f:
+            json.dump(groups, f)
+        logger.info("Список групп успешно сохранен")
+    except Exception as e:
+        logger.error(f"Ошибка при сохранении списка групп: {e}")
+
 @admin_required
 async def manage_groups_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Управление списком разрешенных групп."""
+    command = update.message.text.split()[0][1:]  # Получаем имя команды без /
+    logger.debug(f"Вызвана команда управления группами: {command}")
+    
+    # Загружаем список разрешенных групп из файла
+    allowed_groups = load_groups()
+    logger.debug(f"Загруженный список групп: {allowed_groups}")
+    
+    if command == "listgroups":
+        if not allowed_groups:
+            await update.message.reply_text("📋 Список разрешенных групп пуст")
+            logger.debug("Отправлено сообщение: список групп пуст")
+        else:
+            groups_list = "📋 Список разрешенных групп:\n\n" + "\n".join(allowed_groups)
+            await update.message.reply_text(groups_list)
+            logger.debug(f"Отправлен список групп: {groups_list}")
+        return
+    
     if not context.args:
         await update.message.reply_text(
             "Используйте:\n"
@@ -987,24 +1024,6 @@ async def manage_groups_command(update: Update, context: ContextTypes.DEFAULT_TY
             "/removegroup ID - удалить группу\n"
             "/listgroups - показать список групп"
         )
-        return
-
-    command = update.message.text.split()[0][1:]  # Получаем имя команды без /
-    
-    # Получаем список разрешенных групп
-    allowed_groups = os.getenv('ALLOWED_GROUPS', '').split(',')
-    allowed_groups = [g.strip() for g in allowed_groups if g.strip()]
-    
-    if command == "listgroups":
-        if not allowed_groups:
-            await update.message.reply_text("📋 Список разрешенных групп пуст")
-        else:
-            groups_list = "📋 Список разрешенных групп:\n\n" + "\n".join(allowed_groups)
-            await update.message.reply_text(groups_list)
-        return
-    
-    if len(context.args) < 1:
-        await update.message.reply_text("❌ Не указан ID группы")
         return
         
     group_id = context.args[0]
@@ -1016,7 +1035,8 @@ async def manage_groups_command(update: Update, context: ContextTypes.DEFAULT_TY
         
         if group_id not in allowed_groups:
             allowed_groups.append(group_id)
-            os.environ['ALLOWED_GROUPS'] = ','.join(allowed_groups)
+            save_groups(allowed_groups)
+            logger.info(f"Добавлена новая группа: {group_id}")
             await update.message.reply_text(f"✅ Группа {group_id} добавлена")
         else:
             await update.message.reply_text("ℹ️ Эта группа уже в списке разрешенных")
@@ -1024,7 +1044,8 @@ async def manage_groups_command(update: Update, context: ContextTypes.DEFAULT_TY
     elif command == "removegroup":
         if group_id in allowed_groups:
             allowed_groups.remove(group_id)
-            os.environ['ALLOWED_GROUPS'] = ','.join(allowed_groups)
+            save_groups(allowed_groups)
+            logger.info(f"Удалена группа: {group_id}")
             await update.message.reply_text(f"✅ Группа {group_id} удалена")
         else:
             await update.message.reply_text("ℹ️ Этой группы нет в списке разрешенных")

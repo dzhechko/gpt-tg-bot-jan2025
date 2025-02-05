@@ -123,8 +123,12 @@ class GPTBot:
         self.application.add_handler(CommandHandler('logs', logs_command))
         self.application.add_handler(CommandHandler(['adduser', 'removeuser', 'listusers'], manage_users_command))
         
-        # Добавляем новые административные команды
-        self.application.add_handler(CommandHandler(['addgroup', 'removegroup', 'listgroups'], manage_groups_command))
+        # Добавляем отдельные обработчики для команд управления группами
+        self.application.add_handler(CommandHandler('addgroup', manage_groups_command))
+        self.application.add_handler(CommandHandler('removegroup', manage_groups_command))
+        self.application.add_handler(CommandHandler('listgroups', manage_groups_command))
+
+        # Добавляем остальные административные команды
         self.application.add_handler(CommandHandler('restart', restart_command))
         self.application.add_handler(CommandHandler('maintenance', maintenance_command))
 

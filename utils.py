@@ -43,6 +43,17 @@ def check_user_access(user_id: int) -> bool:
         logger.error(f"Ошибка при проверке доступа: {e}")
         return False
 
+def load_groups() -> list:
+    """Загружает список разрешенных групп из файла."""
+    try:
+        if os.path.exists('allowed_groups.json'):
+            with open('allowed_groups.json', 'r') as f:
+                return json.load(f)
+        return []
+    except Exception as e:
+        logger.error(f"Ошибка при загрузке списка групп: {e}")
+        return []
+
 def check_group_access(chat_id: int) -> bool:
     """
     Проверяет, имеет ли группа доступ к боту.
@@ -53,29 +64,18 @@ def check_group_access(chat_id: int) -> bool:
     Returns:
         bool: True если группа имеет доступ, False в противном случае
     """
-    allowed_groups = os.getenv('ALLOWED_GROUPS')
+    # Загружаем список разрешенных групп из файла
+    allowed_groups = load_groups()
     
-    # Если переменная ALLOWED_GROUPS не задана, разрешаем доступ всем группам
+    # Если список пустой, разрешаем доступ всем группам
     if not allowed_groups:
         return True
     
-    try:
-        # Преобразуем строку с ID в список чисел
-        allowed_ids = [int(gid.strip()) for gid in allowed_groups.split(',') if gid.strip().isdigit()]
-        
-        # Если список пустой после обработки, разрешаем доступ всем группам
-        if not allowed_ids:
-            return True
-        
-        # Проверяем наличие ID группы в списке разрешенных
-        has_access = chat_id in allowed_ids
-        if not has_access:
-            logger.warning(f"Попытка доступа из неразрешенной группы {chat_id}")
-        return has_access
-        
-    except Exception as e:
-        logger.error(f"Ошибка при проверке доступа группы: {e}")
-        return False
+    # Проверяем наличие ID группы в списке разрешенных
+    has_access = str(chat_id) in allowed_groups
+    if not has_access:
+        logger.warning(f"Попытка доступа из неразрешенной группы {chat_id}")
+    return has_access
 
 def check_user_access_decorator(func):
     """Декоратор для проверки доступа пользователя к командам бота."""
