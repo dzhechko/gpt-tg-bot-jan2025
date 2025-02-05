@@ -1,8 +1,10 @@
+import os
+import logging
+from settings import DEBUG
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from loguru import logger
 import json
-import os
 from settings import SettingsManager
 from utils import (
     create_settings_keyboard,
@@ -903,24 +905,44 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет последние логи бота."""
     try:
-        log_file = "debug.log" if DEBUG else "production.log"
-        with open(log_file, 'r', encoding='utf-8') as f:
-            # Читаем последние 50 строк
-            lines = f.readlines()[-50:]
-            logs = "📋 Последние логи:\n\n" + "".join(lines)
+        log_file = "logs/debug.log" if DEBUG else "logs/production.log"
+        
+        if not os.path.exists(log_file):
+            await update.message.reply_text(
+                "📋 Лог-файл пока пуст или не существует."
+            )
+            return
             
-            # Если текст слишком длинный, отправляем файлом
-            if len(logs) > 4000:
-                await context.bot.send_document(
-                    chat_id=update.effective_chat.id,
-                    document=log_file.encode(),
-                    filename=log_file,
-                    caption="📋 Лог-файл бота"
-                )
-            else:
-                await update.message.reply_text(logs)
+        try:
+            with open(log_file, 'r', encoding='utf-8') as f:
+                # Читаем последние 50 строк
+                lines = f.readlines()[-50:]
+                logs = "📋 Последние логи:\n\n" + "".join(lines)
+                
+                # Если текст слишком длинный, отправляем файлом
+                if len(logs) > 4000:
+                    await context.bot.send_document(
+                        chat_id=update.effective_chat.id,
+                        document=open(log_file, 'rb'),
+                        filename=os.path.basename(log_file),
+                        caption="📋 Лог-файл бота"
+                    )
+                else:
+                    await update.message.reply_text(logs)
+                    
+        except UnicodeDecodeError:
+            # Если файл сжат, отправляем его как есть
+            await context.bot.send_document(
+                chat_id=update.effective_chat.id,
+                document=open(log_file, 'rb'),
+                filename=os.path.basename(log_file),
+                caption="📋 Сжатый лог-файл бота"
+            )
+            
     except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка при чтении логов: {e}")
+        error_msg = f"❌ Ошибка при чтении логов: {str(e)}"
+        logger.error(error_msg)
+        await update.message.reply_text(error_msg)
 
 @admin_required
 async def manage_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

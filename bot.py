@@ -40,12 +40,41 @@ from handlers import (
 )
 from settings import SettingsManager
 import asyncio
+import sys
 
 # Загрузка переменных окружения
 load_dotenv()
 
 # Включение/выключение режима отладки
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+
+# Настройка логирования
+logger.remove()  # Удаляем стандартный обработчик
+LOG_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+
+if DEBUG:
+    logger.add(
+        "logs/debug.log",
+        format=LOG_FORMAT,
+        level="DEBUG",
+        rotation="500 MB",
+        compression="zip",
+        retention="10 days"
+    )
+    logger.add(sys.stderr, format=LOG_FORMAT, level="DEBUG")
+else:
+    logger.add(
+        "logs/production.log",
+        format=LOG_FORMAT,
+        level="INFO",
+        rotation="500 MB",
+        compression="zip",
+        retention="30 days"
+    )
+    logger.add(sys.stderr, format=LOG_FORMAT, level="INFO")
+
+# Создаем директорию для логов, если её нет
+os.makedirs("logs", exist_ok=True)
 
 # Инициализация менеджера настроек
 settings_manager = SettingsManager()
@@ -66,12 +95,6 @@ class GPTBot:
             api_key=openai_api_key,
             base_url=os.getenv('OPENAI_API_BASE', "https://api.openai.com/v1")
         )
-
-        # Настройка логирования
-        if DEBUG:
-            logger.add("debug.log", rotation="500 MB", level="DEBUG")
-        else:
-            logger.add("production.log", rotation="500 MB", level="INFO")
 
         # Создаем приложение
         self.application = Application.builder().token(self.token).build()

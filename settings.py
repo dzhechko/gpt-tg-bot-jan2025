@@ -11,11 +11,7 @@ load_dotenv()
 # Включение/выключение режима отладки
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
-# Настройка логирования
-if DEBUG:
-    logger.add("debug.log", rotation="500 MB", level="DEBUG")
-else:
-    logger.add("production.log", rotation="500 MB", level="INFO")
+# Настройка логирования теперь происходит в bot.py
 
 class TextModelSettings(BaseModel):
     base_url: str = "https://api.openai.com/v1"
