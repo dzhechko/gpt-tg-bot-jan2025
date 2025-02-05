@@ -101,44 +101,59 @@ class GPTBot:
             context: Контекст бота
         """
         try:
-            # Создаем потоковый запрос к API
+            # Получаем настройки пользователя
+            settings = settings_manager.get_user_settings(chat_id)
+            text_settings = settings.text_settings
+
+            # Создаем потоковый запрос к API с настройками пользователя
             stream = self.openai_client.chat.completions.create(
-                model=os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo'),
+                model=text_settings.model,
                 messages=messages,
-                stream=True,
-                temperature=0.7,
-                max_tokens=2000
+                temperature=text_settings.temperature,
+                max_tokens=text_settings.max_tokens,
+                stream=True
             )
 
             # Буфер для накопления частей ответа
             response_buffer = ""
+            update_counter = 0  # Счетчик для обновлений
             
-            # Обрабатываем поток ответов в реальном времени
-            async for chunk in stream:
+            # Обрабатываем поток ответов
+            for chunk in stream:
                 if chunk.choices[0].delta.content is not None:
-                    # Получаем часть ответа
                     content = chunk.choices[0].delta.content
                     response_buffer += content
+                    update_counter += 1
                     
-                    try:
-                        # Обновляем сообщение в Telegram с каждым новым фрагментом
-                        await self.telegram_bot.edit_message_text(
-                            chat_id=chat_id,
-                            message_id=message_id,
-                            text=response_buffer
-                        )
-                    except Exception as e:
-                        logger.debug(f"Ошибка при обновлении сообщения: {e}")
-                        # Продолжаем получать ответ даже если произошла ошибка обновления
+                    # Обновляем сообщение каждые 5 чанков или если есть новая строка
+                    if update_counter >= 5 or '\n' in content:
+                        try:
+                            await self.telegram_bot.edit_message_text(
+                                chat_id=chat_id,
+                                message_id=message_id,
+                                text=response_buffer
+                            )
+                            update_counter = 0  # Сбрасываем счетчик
+                        except Exception as e:
+                            logger.debug(f"Ошибка при обновлении сообщения: {e}")
 
-            # Сохраняем ответ в историю
+            # Отправляем финальное обновление
             if response_buffer:
-                settings = settings_manager.get_user_settings(chat_id)
-                settings.message_history.append({
-                    "role": "assistant",
-                    "content": response_buffer
-                })
-                settings_manager.save_settings()
+                try:
+                    await self.telegram_bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=response_buffer
+                    )
+                    
+                    # Сохраняем ответ в историю
+                    settings.message_history.append({
+                        "role": "assistant",
+                        "content": response_buffer
+                    })
+                    settings_manager.save_settings()
+                except Exception as e:
+                    logger.debug(f"Ошибка при финальном обновлении: {e}")
 
         except Exception as e:
             logger.error(f"Ошибка при получении ответа от OpenAI: {e}")
