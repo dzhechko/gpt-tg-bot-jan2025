@@ -203,22 +203,12 @@ class TelegramBot:
             return None
 
     async def run(self):
-        """Запуск бота в режиме polling."""
+        """Запуск бота."""
         try:
-            if not self.application.running:
-                await self.application.initialize()
-                await self.application.start()
-                logger.info("Бот запущен и ожидает сообщений...")
-                await self.application.run_polling(
-                    allowed_updates=Update.ALL_TYPES,
-                    close_loop=False
-                )
+            logger.info("Бот запущен и ожидает сообщений...")
+            await self.application.initialize()  # Инициализация приложения
+            await self.application.start()
+            await self.application.run_polling(allowed_updates=Update.ALL_TYPES)
         except Exception as e:
             logger.error(f"Ошибка при запуске бота: {str(e)}")
-            if self.application.running:
-                try:
-                    await self.application.stop()
-                    await self.application.shutdown()
-                except Exception as shutdown_error:
-                    logger.error(f"Ошибка при остановке бота: {str(shutdown_error)}")
             raise 

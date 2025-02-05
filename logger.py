@@ -10,6 +10,10 @@ def setup_logger():
     """Настройка логгера с поддержкой JSON формата и различных уровней логирования."""
     logger = logging.getLogger('TelegramBot')
     
+    # Если логгер уже настроен, возвращаем его
+    if logger.handlers:
+        return logger
+    
     # Установка уровня логирования
     logger.setLevel(logging.DEBUG if DEBUG else logging.INFO)
     
@@ -38,6 +42,9 @@ def setup_logger():
     json_formatter = CustomJsonFormatter(
         '%(timestamp)s %(name)s %(level)s %(message)s'
     )
+    console_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
     
     # Обработчик для файла с JSON логами
     json_handler = logging.FileHandler(
@@ -46,15 +53,12 @@ def setup_logger():
     json_handler.setFormatter(json_formatter)
     json_handler.setLevel(logging.DEBUG if DEBUG else logging.INFO)
     
-    # Обработчик для консоли с человекочитаемым форматом
-    console_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+    # Обработчик для консоли
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(console_formatter)
     console_handler.setLevel(logging.DEBUG if DEBUG else logging.INFO)
     
-    # Добавление обработчиков к логгеру
+    # Добавляем обработчики к логгеру
     logger.addHandler(json_handler)
     logger.addHandler(console_handler)
     
