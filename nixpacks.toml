@@ -4,15 +4,17 @@ nixPkgs = [
     "espeak-ng",
     "gcc",
     "pkg-config",
-    "python39",
-    "python39Packages.pip"
+    "python311",
+    "python311Packages.pip",
+    "python311Packages.setuptools",
+    "python311Packages.wheel"
 ]
 
 [phases.install]
 cmds = [
-    "python -m pip install --upgrade pip",
-    "pip install -r requirements.txt"
+    "python3.11 -m pip install --upgrade pip setuptools wheel",
+    "python3.11 -m pip install -r requirements.txt"
 ]
 
 [start]
-cmd = "python main.py" 
+cmd = "python3.11 main.py" 
