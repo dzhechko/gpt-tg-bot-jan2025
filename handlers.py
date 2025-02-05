@@ -815,8 +815,8 @@ async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     
     # Базовая информация о пользователе
     response = [
-        f"👤 Ваш Telegram ID: `{user.id}`",
-        f"Username: @{user.username}",
+        f"👤 Ваш Telegram ID: {user.id}",
+        f"Username: @{user.username}" if user.username else "Username: отсутствует",
         f"Имя: {user.first_name}"
     ]
     
@@ -825,13 +825,12 @@ async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         response.extend([
             "\n📢 Информация о группе:",
             f"Название: {chat.title}",
-            f"ID группы: `{chat.id}`",
+            f"ID группы: {chat.id}",
             "\n💡 Для добавления группы в список разрешенных, используйте этот ID в переменной ALLOWED_GROUPS"
         ])
     
     await update.message.reply_text(
-        "\n".join(response),
-        parse_mode='Markdown'
+        "\n".join(response)
     )
 
 def is_admin(user_id: int) -> bool:

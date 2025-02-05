@@ -4,7 +4,8 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
-    filters
+    filters,
+    ContextTypes
 )
 from telegram.error import RetryAfter, TimedOut, NetworkError, Conflict, BadRequest
 from openai import OpenAI
@@ -158,24 +159,35 @@ class GPTBot:
             pattern='^(change_image_model|set_image_model_.*|change_size|set_size_.*|change_quality|set_quality_.*|change_style|set_style_.*|toggle_hdr|change_image_base_url)$'
         ))
 
-    async def _error_handler(self, update: Update, context):
-        """Обработчик ошибок."""
+    async def _error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Обработчик ошибок бота."""
         try:
-            raise context.error
-        except Conflict:
-            logger.warning("Конфликт при получении обновлений. Возможно, запущено несколько экземпляров бота.")
-        except BadRequest as e:
-            if "Message is not modified" in str(e):
-                # Игнорируем эту ошибку, так как она не влияет на функциональность
-                pass
+            if update and update.effective_message:
+                chat_id = update.effective_chat.id
+                error_text = "Произошла ошибка при обработке запроса. Попробуйте позже или обратитесь к администратору."
+                
+                if isinstance(context.error, BadRequest):
+                    if "entity" in str(context.error) or "entities" in str(context.error):
+                        error_text = "Ошибка форматирования сообщения. Пожалуйста, попробуйте еще раз."
+                        logger.warning(f"Ошибка форматирования: {context.error}")
+                    else:
+                        error_text = "Некорректный запрос. Проверьте правильность команды."
+                        logger.error(f"Ошибка BadRequest: {context.error}")
+                else:
+                    logger.error(f"Необработанная ошибка: {context.error}")
+                
+                try:
+                    # Пробуем отправить новое сообщение вместо редактирования
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=error_text
+                    )
+                except Exception as send_error:
+                    logger.error(f"Не удалось отправить сообщение об ошибке: {send_error}")
             else:
-                logger.error(f"Ошибка BadRequest: {e}")
-        except (TimedOut, NetworkError):
-            logger.warning("Временная ошибка сети")
-        except RetryAfter as e:
-            logger.warning(f"Превышен лимит запросов, ожидаем {e.retry_after} секунд")
+                logger.error(f"Ошибка без контекста сообщения: {context.error}")
         except Exception as e:
-            logger.error(f"Необработанная ошибка: {e}")
+            logger.error(f"Ошибка в обработчике ошибок: {e}")
 
     async def stream_chat_completion(self, messages, chat_id, message_id, context):
         """
