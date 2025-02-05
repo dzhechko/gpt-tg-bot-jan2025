@@ -19,9 +19,24 @@ def setup_logger():
         os.makedirs(log_dir)
     
     # Форматтер для JSON логов
-    json_formatter = jsonlogger.JsonFormatter(
-        fmt='%(asctime)s %(name)s %(levelname)s %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+    class CustomJsonFormatter(jsonlogger.JsonFormatter):
+        def add_fields(self, log_record, record, message_dict):
+            super().add_fields(log_record, record, message_dict)
+            if not log_record.get('timestamp'):
+                log_record['timestamp'] = datetime.now().isoformat()
+            if log_record.get('level'):
+                log_record['level'] = log_record['level'].upper()
+            else:
+                log_record['level'] = record.levelname
+            
+            # Переименовываем поле message в log_message если оно есть в extra
+            if 'message' in message_dict:
+                log_record['log_message'] = message_dict['message']
+                del log_record['message']
+    
+    # Создание форматтеров
+    json_formatter = CustomJsonFormatter(
+        '%(timestamp)s %(name)s %(level)s %(message)s'
     )
     
     # Обработчик для файла с JSON логами
@@ -58,9 +73,9 @@ def log_message(level, message, **kwargs):
         **kwargs: Дополнительные поля для логирования
     """
     log_data = {
-        'message': message,
+        'log_message': message,
         'timestamp': datetime.now().isoformat(),
-        **kwargs
+        **{k: v for k, v in kwargs.items() if k != 'message'}
     }
     
     level_methods = {
