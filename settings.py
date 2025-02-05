@@ -22,15 +22,24 @@ class TextModelSettings(BaseModel):
     model: str = "gpt-4o-mini"
     temperature: float = 0.7
     max_tokens: int = 1000
+    custom_model: Optional[str] = None
 
     @property
     def available_models(self):
-        return ["gpt-4o-mini", "gpt-4o", "gpt-4", "claude-3-sonnet"]
+        return ["gpt-4o-mini", "gpt-4o", "gpt-4", "Custom Model"]
+
+    @property
+    def effective_model(self):
+        """Возвращает фактическую модель для использования"""
+        if self.model == "Custom Model" and self.custom_model:
+            return self.custom_model
+        return self.model
 
     def dict(self, *args, **kwargs):
         """Переопределяем метод dict для включения свойств в сериализацию"""
         d = super().dict(*args, **kwargs)
         d['available_models'] = self.available_models
+        d['effective_model'] = self.effective_model
         return d
 
 class ImageModelSettings(BaseModel):

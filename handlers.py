@@ -331,18 +331,31 @@ async def handle_text_model_settings(update: Update, context: ContextTypes.DEFAU
         buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="text_settings")])
         keyboard = InlineKeyboardMarkup(buttons)
         await query.edit_message_text(
-            "Выберите модель:",
+            "Выберите модель:\n\n"
+            "gpt-4o-mini - базовая модель (по умолчанию)\n"
+            "gpt-4o - улучшенная модель\n"
+            "gpt-4 - продвинутая модель\n"
+            "Custom Model - указать свою модель",
             reply_markup=keyboard
         )
     
     elif query.data.startswith("set_text_model_"):
         model = query.data.replace("set_text_model_", "")
-        settings_manager.update_text_settings(user_id, model=model)
-        keyboard = create_text_settings_keyboard(settings.text_settings.dict())
-        await query.edit_message_text(
-            "📝 Настройки текстовой модели:",
-            reply_markup=keyboard
-        )
+        if model == "Custom Model":
+            # Сохраняем состояние ожидания ввода пользовательской модели
+            context.user_data["waiting_for_custom_model"] = True
+            await query.edit_message_text(
+                "Пожалуйста, введите название модели.\n"
+                "Например: gpt-3.5-turbo\n\n"
+                "Для отмены введите /cancel"
+            )
+        else:
+            settings_manager.update_text_settings(user_id, model=model)
+            keyboard = create_text_settings_keyboard(settings.text_settings.dict())
+            await query.edit_message_text(
+                "📝 Настройки текстовой модели:",
+                reply_markup=keyboard
+            )
     
     elif query.data == "change_temperature":
         # Создаем кнопки для выбора температуры
@@ -372,7 +385,7 @@ async def handle_text_model_settings(update: Update, context: ContextTypes.DEFAU
         # Создаем кнопки для выбора максимального количества токенов
         token_values = ["500", "1000", "2000", "3000", "4000"]
         buttons = [[InlineKeyboardButton(f"📊 {tokens}", callback_data=f"set_tokens_{tokens}")] 
-                  for tokens in token_values]
+                  for token in token_values]
         buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="text_settings")])
         keyboard = InlineKeyboardMarkup(buttons)
         await query.edit_message_text(
@@ -391,6 +404,43 @@ async def handle_text_model_settings(update: Update, context: ContextTypes.DEFAU
             "📝 Настройки текстовой модели:",
             reply_markup=keyboard
         )
+
+# Добавляем обработчик для пользовательского ввода модели
+@log_handler_call
+async def handle_custom_model_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик ввода пользовательской модели."""
+    if not context.user_data.get("waiting_for_custom_model"):
+        return
+
+    user_id = update.effective_user.id
+    custom_model = update.message.text
+
+    if custom_model.lower() == '/cancel':
+        context.user_data["waiting_for_custom_model"] = False
+        keyboard = create_text_settings_keyboard(
+            settings_manager.get_user_settings(user_id).text_settings.dict()
+        )
+        await update.message.reply_text(
+            "📝 Настройки текстовой модели:",
+            reply_markup=keyboard
+        )
+        return
+
+    settings_manager.update_text_settings(
+        user_id, 
+        model="Custom Model",
+        custom_model=custom_model
+    )
+    context.user_data["waiting_for_custom_model"] = False
+    
+    keyboard = create_text_settings_keyboard(
+        settings_manager.get_user_settings(user_id).text_settings.dict()
+    )
+    await update.message.reply_text(
+        f"✅ Установлена пользовательская модель: {custom_model}\n\n"
+        "📝 Настройки текстовой модели:",
+        reply_markup=keyboard
+    )
 
 @log_handler_call
 async def handle_image_model_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

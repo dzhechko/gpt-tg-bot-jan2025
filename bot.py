@@ -22,7 +22,8 @@ from handlers import (
     handle_text_model_settings,
     handle_image_model_settings,
     show_current_settings_command,
-    handle_image_command
+    handle_image_command,
+    handle_custom_model_input
 )
 from settings import SettingsManager
 
@@ -78,7 +79,16 @@ class GPTBot:
         self.application.add_handler(CommandHandler(['image', 'img'], handle_image_command))
 
         # Добавляем обработчики сообщений
-        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+        self.application.add_handler(MessageHandler(
+            filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+            handle_custom_model_input,
+            group=0
+        ))
+        self.application.add_handler(MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            handle_text,
+            group=1
+        ))
         self.application.add_handler(MessageHandler(filters.PHOTO, handle_image))
 
         # Добавляем обработчики callback'ов
@@ -88,11 +98,11 @@ class GPTBot:
         ))
         self.application.add_handler(CallbackQueryHandler(
             handle_text_model_settings,
-            pattern='^(change_text_model|set_text_model_.*)$'
+            pattern='^(change_text_model|set_text_model_.*|change_temperature|set_temp_.*|change_max_tokens|set_tokens_.*)$'
         ))
         self.application.add_handler(CallbackQueryHandler(
             handle_image_model_settings,
-            pattern='^(change_image_model|set_image_model_.*|change_size|set_size_.*|toggle_hdr)$'
+            pattern='^(change_image_model|set_image_model_.*|change_size|set_size_.*|change_quality|set_quality_.*|change_style|set_style_.*|toggle_hdr)$'
         ))
 
     async def _error_handler(self, update: Update, context):
