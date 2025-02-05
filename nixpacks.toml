@@ -7,17 +7,7 @@ nixPkgs = [
     "python311Full",
     "python311Packages.pip",
     "python311Packages.setuptools",
-    "python311Packages.wheel",
-    "python311Packages.python-telegram-bot",
-    "python311Packages.openai-python",
-    "python311Packages.python-dotenv",
-    "python311Packages.pyttsx3",
-    "python311Packages.speechrecognition",
-    "python311Packages.soundfile",
-    "python311Packages.pillow",
-    "python311Packages.requests",
-    "python311Packages.python-json-logger",
-    "python311Packages.tenacity"
+    "python311Packages.wheel"
 ]
 
 [phases.install]
@@ -25,7 +15,8 @@ cmds = [
     "mkdir -p /opt/venv",
     "python3.11 -m venv /opt/venv",
     ". /opt/venv/bin/activate",
-    "pip install --no-cache-dir -r requirements.txt"
+    "python3.11 -m pip install --upgrade pip setuptools wheel",
+    "python3.11 -m pip install --no-cache-dir -r requirements.txt"
 ]
 
 [start]
