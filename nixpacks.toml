@@ -7,15 +7,25 @@ nixPkgs = [
     "python311Full",
     "python311Packages.pip",
     "python311Packages.setuptools",
-    "python311Packages.wheel"
+    "python311Packages.wheel",
+    "python311Packages.python-telegram-bot",
+    "python311Packages.openai",
+    "python311Packages.python-dotenv",
+    "python311Packages.pyttsx3",
+    "python311Packages.SpeechRecognition",
+    "python311Packages.soundfile",
+    "python311Packages.pillow",
+    "python311Packages.requests",
+    "python311Packages.python-json-logger",
+    "python311Packages.tenacity"
 ]
 
 [phases.install]
 cmds = [
-    "curl -sSL https://bootstrap.pypa.io/get-pip.py -o get-pip.py",
-    "python3.11 get-pip.py",
-    "python3.11 -m pip install -r requirements.txt"
+    "python3.11 -m venv /opt/venv",
+    "source /opt/venv/bin/activate",
+    "pip install --no-cache-dir -r requirements.txt"
 ]
 
 [start]
-cmd = "python3.11 main.py" 
+cmd = "source /opt/venv/bin/activate && python3.11 main.py" 
