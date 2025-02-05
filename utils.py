@@ -48,12 +48,22 @@ def create_image_settings_keyboard(current_settings: dict) -> InlineKeyboardMark
     """Создает клавиатуру для настроек модели изображений."""
     buttons = [
         [("🔄 Изменить модель", "change_image_model")],
-        [(f"📏 Размер: {current_settings['size']}", "change_size")],
-        [(f"✨ Качество: {current_settings['quality']}", "change_quality")],
-        [(f"🎨 Стиль: {current_settings['style']}", "change_style")],
-        [(f"HDR: {'Вкл' if current_settings['hdr'] else 'Выкл'}", "toggle_hdr")],
-        [("🔙 Назад", "back_to_main"), ("❌ Закрыть", "close_settings")]
+        [(f"📏 Размер: {current_settings['size']}", "change_size")]
     ]
+    
+    # Добавляем кнопку качества только если модель поддерживает разные качества
+    if len(current_settings.get('available_qualities', [])) > 1:
+        buttons.append([(f"✨ Качество: {current_settings['quality']}", "change_quality")])
+    
+    # Добавляем кнопку стиля только если модель поддерживает стили
+    if current_settings.get('available_styles', []):
+        buttons.append([(f"🎨 Стиль: {current_settings['style']}", "change_style")])
+    
+    # Добавляем кнопку HDR только если модель поддерживает HDR
+    if current_settings.get('supports_hdr', False):
+        buttons.append([(f"HDR: {'Вкл' if current_settings['hdr'] else 'Выкл'}", "toggle_hdr")])
+    
+    buttons.append([("🔙 Назад", "back_to_main"), ("❌ Закрыть", "close_settings")])
     return create_menu_keyboard(buttons)
 
 async def send_confirmation_dialog(

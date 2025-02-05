@@ -37,19 +37,40 @@ class ImageModelSettings(BaseModel):
 
     @property
     def available_models(self):
-        return ["dall-e-3", "dall-e-2", "stable-diffusion-xl"]
+        return ["dall-e-3", "dall-e-2"]
+
+    @property
+    def model_capabilities(self):
+        return {
+            "dall-e-3": {
+                "sizes": ["1024x1024", "1024x1792", "1792x1024"],
+                "qualities": ["standard", "hd"],
+                "styles": ["natural", "vivid"],
+                "hdr": True
+            },
+            "dall-e-2": {
+                "sizes": ["1024x1024", "512x512", "256x256"],
+                "qualities": ["standard"],
+                "styles": [],
+                "hdr": False
+            }
+        }
 
     @property
     def available_sizes(self):
-        return ["1024x1024", "1024x1792", "1792x1024"]
+        return self.model_capabilities[self.model]["sizes"]
 
     @property
     def available_qualities(self):
-        return ["standard", "hd"]
+        return self.model_capabilities[self.model]["qualities"]
 
     @property
     def available_styles(self):
-        return ["natural", "vivid"]
+        return self.model_capabilities[self.model]["styles"]
+
+    @property
+    def supports_hdr(self):
+        return self.model_capabilities[self.model]["hdr"]
 
 class UserSettings(BaseModel):
     user_id: int

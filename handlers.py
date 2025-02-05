@@ -29,6 +29,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "Используй следующие команды:\n"
         "/help - показать справку\n"
         "/settings - настройки бота\n"
+        "/current_settings - показать текущие настройки\n"
         "/clear - очистить историю сообщений"
     )
     await update.message.reply_text(welcome_text)
@@ -42,8 +43,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "- Просто отправьте мне текстовое сообщение\n"
         "- Я отвечу вам, используя выбранную модель\n\n"
         "🎨 Работа с изображениями:\n"
-        "- Отправьте изображение с описанием\n"
-        "- Или просто текст для генерации изображения\n\n"
+        "- Используйте команду /image или /img с описанием для генерации\n"
+        "  Пример: /image нарисуй красивый закат на море\n"
+        "- Или отправьте существующее изображение с описанием изменений\n"
+        "  для его редактирования\n\n"
         "⚙️ Настройки и команды:\n"
         "/settings - открыть меню настроек\n"
         "/current_settings - показать текущие настройки\n"
@@ -339,6 +342,54 @@ async def handle_text_model_settings(update: Update, context: ContextTypes.DEFAU
             "📝 Настройки текстовой модели:",
             reply_markup=keyboard
         )
+    
+    elif query.data == "change_temperature":
+        # Создаем кнопки для выбора температуры
+        temp_values = ["0.0", "0.3", "0.5", "0.7", "1.0", "1.5", "2.0"]
+        buttons = [[InlineKeyboardButton(f"🌡 {temp}", callback_data=f"set_temp_{temp}")] 
+                  for temp in temp_values]
+        buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="text_settings")])
+        keyboard = InlineKeyboardMarkup(buttons)
+        await query.edit_message_text(
+            "Выберите значение температуры:\n\n"
+            "0.0 - наиболее предсказуемые ответы\n"
+            "0.3-0.7 - баланс креативности и предсказуемости\n"
+            "1.0-2.0 - наиболее креативные ответы",
+            reply_markup=keyboard
+        )
+    
+    elif query.data.startswith("set_temp_"):
+        temp = float(query.data.replace("set_temp_", ""))
+        settings_manager.update_text_settings(user_id, temperature=temp)
+        keyboard = create_text_settings_keyboard(settings.text_settings.dict())
+        await query.edit_message_text(
+            "📝 Настройки текстовой модели:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data == "change_max_tokens":
+        # Создаем кнопки для выбора максимального количества токенов
+        token_values = ["500", "1000", "2000", "3000", "4000"]
+        buttons = [[InlineKeyboardButton(f"📊 {tokens}", callback_data=f"set_tokens_{tokens}")] 
+                  for tokens in token_values]
+        buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="text_settings")])
+        keyboard = InlineKeyboardMarkup(buttons)
+        await query.edit_message_text(
+            "Выберите максимальное количество токенов:\n\n"
+            "500 - короткие ответы\n"
+            "1000 - средние ответы (рекомендуется)\n"
+            "2000-4000 - длинные ответы",
+            reply_markup=keyboard
+        )
+    
+    elif query.data.startswith("set_tokens_"):
+        tokens = int(query.data.replace("set_tokens_", ""))
+        settings_manager.update_text_settings(user_id, max_tokens=tokens)
+        keyboard = create_text_settings_keyboard(settings.text_settings.dict())
+        await query.edit_message_text(
+            "📝 Настройки текстовой модели:",
+            reply_markup=keyboard
+        )
 
 @log_handler_call
 async def handle_image_model_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -376,13 +427,60 @@ async def handle_image_model_settings(update: Update, context: ContextTypes.DEFA
         buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="image_settings")])
         keyboard = InlineKeyboardMarkup(buttons)
         await query.edit_message_text(
-            "Выберите размер изображения:",
+            "Выберите размер изображения:\n\n"
+            "1024x1024 - квадратное изображение\n"
+            "1024x1792 - вертикальное изображение\n"
+            "1792x1024 - горизонтальное изображение",
             reply_markup=keyboard
         )
     
     elif query.data.startswith("set_size_"):
         size = query.data.replace("set_size_", "")
         settings_manager.update_image_settings(user_id, size=size)
+        keyboard = create_image_settings_keyboard(settings.image_settings.dict())
+        await query.edit_message_text(
+            "🎨 Настройки модели изображений:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data == "change_quality":
+        qualities = settings.image_settings.available_qualities
+        buttons = [[InlineKeyboardButton(quality, callback_data=f"set_quality_{quality}")] 
+                  for quality in qualities]
+        buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="image_settings")])
+        keyboard = InlineKeyboardMarkup(buttons)
+        await query.edit_message_text(
+            "Выберите качество изображения:\n\n"
+            "standard - стандартное качество (быстрее)\n"
+            "hd - высокое качество (более детальное)",
+            reply_markup=keyboard
+        )
+    
+    elif query.data.startswith("set_quality_"):
+        quality = query.data.replace("set_quality_", "")
+        settings_manager.update_image_settings(user_id, quality=quality)
+        keyboard = create_image_settings_keyboard(settings.image_settings.dict())
+        await query.edit_message_text(
+            "🎨 Настройки модели изображений:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data == "change_style":
+        styles = settings.image_settings.available_styles
+        buttons = [[InlineKeyboardButton(style, callback_data=f"set_style_{style}")] 
+                  for style in styles]
+        buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="image_settings")])
+        keyboard = InlineKeyboardMarkup(buttons)
+        await query.edit_message_text(
+            "Выберите стиль изображения:\n\n"
+            "natural - естественный, реалистичный стиль\n"
+            "vivid - яркий, выразительный стиль",
+            reply_markup=keyboard
+        )
+    
+    elif query.data.startswith("set_style_"):
+        style = query.data.replace("set_style_", "")
+        settings_manager.update_image_settings(user_id, style=style)
         keyboard = create_image_settings_keyboard(settings.image_settings.dict())
         await query.edit_message_text(
             "🎨 Настройки модели изображений:",
