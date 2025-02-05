@@ -12,6 +12,27 @@ load_dotenv()
 # Включение/выключение режима отладки
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
+def initialize_allowed_users():
+    """Инициализация списка разрешенных пользователей из переменной окружения."""
+    try:
+        # Проверяем существование файла
+        if not os.path.exists('allowed_users.json'):
+            # Получаем список пользователей из переменной окружения
+            allowed_users = os.getenv('ALLOWED_USERS', '').split(',')
+            # Фильтруем пустые значения и пробелы
+            allowed_users = [user.strip() for user in allowed_users if user.strip()]
+            
+            # Сохраняем список в файл
+            with open('allowed_users.json', 'w') as f:
+                json.dump(allowed_users, f)
+            
+            if allowed_users:
+                logger.info(f"Список разрешенных пользователей инициализирован из переменной окружения: {allowed_users}")
+            else:
+                logger.info("Создан пустой список разрешенных пользователей")
+    except Exception as e:
+        logger.error(f"Ошибка при инициализации списка пользователей: {e}")
+
 def initialize_allowed_groups():
     """Инициализация списка разрешенных групп из переменной окружения."""
     try:
@@ -48,7 +69,8 @@ def main():
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
         
-        # Инициализируем список разрешенных групп
+        # Инициализируем списки разрешенных пользователей и групп
+        initialize_allowed_users()
         initialize_allowed_groups()
         
         # Инициализация и запуск бота

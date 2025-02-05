@@ -17,28 +17,26 @@ def check_user_access(user_id: int) -> bool:
     Returns:
         bool: True если пользователь имеет доступ, False в противном случае
     """
-    allowed_users = os.getenv('ALLOWED_USERS')
-    
-    # Если переменная ALLOWED_USERS не задана или пустая, запрещаем доступ
-    if not allowed_users:
-        logger.warning(f"Переменная ALLOWED_USERS не задана. Доступ запрещен для пользователя {user_id}")
-        return False
-    
     try:
-        # Преобразуем строку с ID в список чисел
-        allowed_ids = [int(uid.strip()) for uid in allowed_users.split(',') if uid.strip().isdigit()]
-        
-        # Если список пустой после обработки, запрещаем доступ
-        if not allowed_ids:
-            logger.warning("Список ALLOWED_USERS пуст или содержит некорректные значения")
+        # Загружаем список разрешенных пользователей из файла
+        if os.path.exists('allowed_users.json'):
+            with open('allowed_users.json', 'r') as f:
+                allowed_users = json.load(f)
+            
+            # Если список пустой, запрещаем доступ
+            if not allowed_users:
+                logger.warning(f"Список разрешенных пользователей пуст. Доступ запрещен для пользователя {user_id}")
+                return False
+            
+            # Проверяем наличие ID пользователя в списке разрешенных
+            has_access = str(user_id) in allowed_users
+            if not has_access:
+                logger.warning(f"Попытка доступа от неразрешенного пользователя {user_id}")
+            return has_access
+        else:
+            logger.warning("Файл allowed_users.json не найден")
             return False
-        
-        # Проверяем наличие ID пользователя в списке разрешенных
-        has_access = user_id in allowed_ids
-        if not has_access:
-            logger.warning(f"Попытка доступа от неразрешенного пользователя {user_id}")
-        return has_access
-        
+            
     except Exception as e:
         logger.error(f"Ошибка при проверке доступа: {e}")
         return False

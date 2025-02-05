@@ -947,7 +947,44 @@ async def logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 @admin_required
 async def manage_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Управление списком разрешенных пользователей."""
-    if len(context.args) < 2:
+    command = update.message.text.split()[0][1:]  # Получаем имя команды без /
+    logger.debug(f"Вызвана команда управления пользователями: {command}")
+    
+    def load_users() -> list:
+        """Загружает список разрешенных пользователей из файла."""
+        try:
+            if os.path.exists('allowed_users.json'):
+                with open('allowed_users.json', 'r') as f:
+                    return json.load(f)
+            return []
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке списка пользователей: {e}")
+            return []
+    
+    def save_users(users: list) -> None:
+        """Сохраняет список разрешенных пользователей в файл."""
+        try:
+            with open('allowed_users.json', 'w') as f:
+                json.dump(users, f)
+            logger.info("Список пользователей успешно сохранен")
+        except Exception as e:
+            logger.error(f"Ошибка при сохранении списка пользователей: {e}")
+    
+    # Загружаем текущий список пользователей
+    allowed_users = load_users()
+    logger.debug(f"Загруженный список пользователей: {allowed_users}")
+    
+    if command == "listusers":
+        if not allowed_users:
+            await update.message.reply_text("📋 Список разрешенных пользователей пуст")
+            logger.debug("Отправлено сообщение: список пользователей пуст")
+        else:
+            users_list = "📋 Список разрешенных пользователей:\n\n" + "\n".join(allowed_users)
+            await update.message.reply_text(users_list)
+            logger.debug(f"Отправлен список пользователей: {users_list}")
+        return
+    
+    if not context.args:
         await update.message.reply_text(
             "Используйте:\n"
             "/adduser ID - добавить пользователя\n"
@@ -956,26 +993,32 @@ async def manage_users_command(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
     
-    action = context.args[0].lower()
-    user_id = context.args[1]
+    user_id = context.args[0]
     
-    allowed_users = os.getenv('ALLOWED_USERS', '').split(',')
-    
-    if action == "add":
+    if command == "adduser":
+        if not user_id.isdigit():
+            await update.message.reply_text("❌ ID пользователя должен быть числом")
+            return
+        
         if user_id not in allowed_users:
             allowed_users.append(user_id)
-            os.environ['ALLOWED_USERS'] = ','.join(allowed_users)
+            save_users(allowed_users)
+            logger.info(f"Добавлен новый пользователь: {user_id}")
             await update.message.reply_text(f"✅ Пользователь {user_id} добавлен")
-    elif action == "remove":
+        else:
+            await update.message.reply_text("ℹ️ Этот пользователь уже в списке разрешенных")
+    
+    elif command == "removeuser":
         if user_id in allowed_users:
             allowed_users.remove(user_id)
-            os.environ['ALLOWED_USERS'] = ','.join(allowed_users)
+            save_users(allowed_users)
+            logger.info(f"Удален пользователь: {user_id}")
             await update.message.reply_text(f"✅ Пользователь {user_id} удален")
-    elif action == "list":
-        users_list = "📋 Список разрешенных пользователей:\n\n" + "\n".join(allowed_users)
-        await update.message.reply_text(users_list)
+        else:
+            await update.message.reply_text("ℹ️ Этого пользователя нет в списке разрешенных")
+    
     else:
-        await update.message.reply_text("❌ Неизвестное действие") 
+        await update.message.reply_text("❌ Неизвестная команда")
 
 def load_groups() -> list:
     """Загружает список разрешенных групп из файла."""
