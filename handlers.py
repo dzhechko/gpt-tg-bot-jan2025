@@ -473,6 +473,15 @@ async def handle_image_model_settings(update: Update, context: ContextTypes.DEFA
             reply_markup=keyboard
         )
     
+    elif query.data.startswith("set_image_model_"):
+        model = query.data.replace("set_image_model_", "")
+        settings_manager.update_image_settings(user_id, model=model)
+        keyboard = create_image_settings_keyboard(settings.image_settings.dict())
+        await query.edit_message_text(
+            "🎨 Настройки модели изображений:",
+            reply_markup=keyboard
+        )
+    
     elif query.data == "change_image_base_url":
         # Сохраняем состояние ожидания ввода base_url для изображений
         context.user_data["waiting_for_image_base_url"] = True
@@ -480,6 +489,85 @@ async def handle_image_model_settings(update: Update, context: ContextTypes.DEFA
             "Введите новый Base URL для модели изображений.\n\n"
             "По умолчанию: https://api.openai.com/v1\n\n"
             "Для отмены введите /cancel"
+        )
+    
+    elif query.data == "change_size":
+        sizes = settings.image_settings.available_sizes
+        current_size = settings.image_settings.size
+        buttons = [[InlineKeyboardButton(f"{size} {'✓' if size == current_size else ''}", 
+                   callback_data=f"set_size_{size}")] for size in sizes]
+        buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="image_settings")])
+        keyboard = InlineKeyboardMarkup(buttons)
+        await query.edit_message_text(
+            "Выберите размер изображения:\n\n"
+            "1024x1024 - квадратное изображение\n"
+            "1024x1792 - вертикальное изображение\n"
+            "1792x1024 - горизонтальное изображение",
+            reply_markup=keyboard
+        )
+    
+    elif query.data.startswith("set_size_"):
+        size = query.data.replace("set_size_", "")
+        settings_manager.update_image_settings(user_id, size=size)
+        keyboard = create_image_settings_keyboard(settings.image_settings.dict())
+        await query.edit_message_text(
+            "🎨 Настройки модели изображений:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data == "change_quality":
+        qualities = settings.image_settings.available_qualities
+        current_quality = settings.image_settings.quality
+        buttons = [[InlineKeyboardButton(f"{quality} {'✓' if quality == current_quality else ''}", 
+                   callback_data=f"set_quality_{quality}")] for quality in qualities]
+        buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="image_settings")])
+        keyboard = InlineKeyboardMarkup(buttons)
+        await query.edit_message_text(
+            "Выберите качество изображения:\n\n"
+            "standard - стандартное качество (быстрее)\n"
+            "hd - высокое качество (более детальное)",
+            reply_markup=keyboard
+        )
+    
+    elif query.data.startswith("set_quality_"):
+        quality = query.data.replace("set_quality_", "")
+        settings_manager.update_image_settings(user_id, quality=quality)
+        keyboard = create_image_settings_keyboard(settings.image_settings.dict())
+        await query.edit_message_text(
+            "🎨 Настройки модели изображений:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data == "change_style":
+        styles = settings.image_settings.available_styles
+        current_style = settings.image_settings.style
+        buttons = [[InlineKeyboardButton(f"{style} {'✓' if style == current_style else ''}", 
+                   callback_data=f"set_style_{style}")] for style in styles]
+        buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="image_settings")])
+        keyboard = InlineKeyboardMarkup(buttons)
+        await query.edit_message_text(
+            "Выберите стиль изображения:\n\n"
+            "natural - естественный, реалистичный стиль\n"
+            "vivid - яркий, выразительный стиль",
+            reply_markup=keyboard
+        )
+    
+    elif query.data.startswith("set_style_"):
+        style = query.data.replace("set_style_", "")
+        settings_manager.update_image_settings(user_id, style=style)
+        keyboard = create_image_settings_keyboard(settings.image_settings.dict())
+        await query.edit_message_text(
+            "🎨 Настройки модели изображений:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data == "toggle_hdr":
+        current_hdr = settings.image_settings.hdr
+        settings_manager.update_image_settings(user_id, hdr=not current_hdr)
+        keyboard = create_image_settings_keyboard(settings.image_settings.dict())
+        await query.edit_message_text(
+            "🎨 Настройки модели изображений:",
+            reply_markup=keyboard
         )
 
 # Добавляем обработчик для пользовательского ввода base_url для изображений
