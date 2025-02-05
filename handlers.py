@@ -521,4 +521,45 @@ async def handle_image_base_url_input(update: Update, context: ContextTypes.DEFA
         f"✅ Установлен новый Base URL для модели изображений: {new_base_url}\n\n"
         "🎨 Настройки модели изображений:",
         reply_markup=keyboard
+    )
+
+# Добавляем обработчик для пользовательского ввода base_url
+@log_handler_call
+async def handle_base_url_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик ввода base_url для текстовой модели."""
+    if not context.user_data.get("waiting_for_base_url"):
+        return
+
+    user_id = update.effective_user.id
+    new_base_url = update.message.text
+
+    if new_base_url.lower() == '/cancel':
+        context.user_data["waiting_for_base_url"] = False
+        keyboard = create_text_settings_keyboard(
+            settings_manager.get_user_settings(user_id).text_settings.dict()
+        )
+        await update.message.reply_text(
+            "📝 Настройки текстовой модели:",
+            reply_markup=keyboard
+        )
+        return
+
+    # Проверяем формат URL
+    if not new_base_url.startswith(('http://', 'https://')):
+        await update.message.reply_text(
+            "❌ Некорректный формат URL. URL должен начинаться с http:// или https://\n"
+            "Попробуйте еще раз или введите /cancel для отмены."
+        )
+        return
+
+    settings_manager.update_text_settings(user_id, base_url=new_base_url)
+    context.user_data["waiting_for_base_url"] = False
+    
+    keyboard = create_text_settings_keyboard(
+        settings_manager.get_user_settings(user_id).text_settings.dict()
+    )
+    await update.message.reply_text(
+        f"✅ Установлен новый Base URL для текстовой модели: {new_base_url}\n\n"
+        "📝 Настройки текстовой модели:",
+        reply_markup=keyboard
     ) 
