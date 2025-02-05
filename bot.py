@@ -29,6 +29,7 @@ from handlers import (
     handle_settings_import
 )
 from settings import SettingsManager
+import asyncio
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -164,74 +165,107 @@ class GPTBot:
             message_id: ID сообщения для обновления
             context: Контекст бота
         """
-        try:
-            # Получаем настройки пользователя
-            settings = settings_manager.get_user_settings(chat_id)
-            text_settings = settings.text_settings
+        max_retries = 3
+        retry_delay = 100  # начальная задержка в секундах
+        attempt = 0
 
-            # Создаем потоковый запрос к API с настройками пользователя
-            stream = self.openai_client.chat.completions.create(
-                model=text_settings.model,
-                messages=messages,
-                temperature=text_settings.temperature,
-                max_tokens=text_settings.max_tokens,
-                stream=True
-            )
+        while attempt < max_retries:
+            try:
+                # Получаем настройки пользователя
+                settings = settings_manager.get_user_settings(chat_id)
+                text_settings = settings.text_settings
 
-            # Буфер для накопления частей ответа
-            response_buffer = ""
-            last_update = ""  # Сохраняем последнее отправленное сообщение
-            update_counter = 0  # Счетчик для обновлений
-            
-            # Обрабатываем поток ответов
-            for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
-                    content = chunk.choices[0].delta.content
-                    response_buffer += content
-                    update_counter += 1
-                    
-                    # Обновляем сообщение каждые 5 чанков или если есть новая строка
-                    if update_counter >= 5 or '\n' in content:
-                        try:
-                            # Проверяем, изменилось ли сообщение
-                            if response_buffer != last_update:
-                                await self.application.bot.edit_message_text(
-                                    chat_id=chat_id,
-                                    message_id=message_id,
-                                    text=response_buffer
-                                )
-                                last_update = response_buffer
-                            update_counter = 0
-                        except BadRequest as e:
-                            if "Message is not modified" not in str(e):
-                                logger.debug(f"Ошибка при обновлении сообщения: {e}")
+                # Создаем потоковый запрос к API с настройками пользователя
+                stream = self.openai_client.chat.completions.create(
+                    model=text_settings.model,
+                    messages=messages,
+                    temperature=text_settings.temperature,
+                    max_tokens=text_settings.max_tokens,
+                    stream=True
+                )
 
-            # Отправляем финальное обновление
-            if response_buffer and response_buffer != last_update:
-                try:
+                # Буфер для накопления частей ответа
+                response_buffer = ""
+                last_update = ""  # Сохраняем последнее отправленное сообщение
+                update_counter = 0  # Счетчик для обновлений
+                
+                # Обрабатываем поток ответов
+                for chunk in stream:
+                    if chunk.choices[0].delta.content is not None:
+                        content = chunk.choices[0].delta.content
+                        response_buffer += content
+                        update_counter += 1
+                        
+                        # Обновляем сообщение каждые 5 чанков или если есть новая строка
+                        if update_counter >= 5 or '\n' in content:
+                            try:
+                                # Проверяем, изменилось ли сообщение
+                                if response_buffer != last_update:
+                                    await self.application.bot.edit_message_text(
+                                        chat_id=chat_id,
+                                        message_id=message_id,
+                                        text=response_buffer
+                                    )
+                                    last_update = response_buffer
+                                update_counter = 0
+                            except BadRequest as e:
+                                if "Message is not modified" not in str(e):
+                                    logger.debug(f"Ошибка при обновлении сообщения: {e}")
+
+                # Отправляем финальное обновление
+                if response_buffer and response_buffer != last_update:
+                    try:
+                        await self.application.bot.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=message_id,
+                            text=response_buffer
+                        )
+                        
+                        # Сохраняем ответ в историю
+                        settings.message_history.append({
+                            "role": "assistant",
+                            "content": response_buffer
+                        })
+                        settings_manager.save_settings()
+                    except BadRequest as e:
+                        if "Message is not modified" not in str(e):
+                            logger.debug(f"Ошибка при финальном обновлении: {e}")
+                
+                # Если успешно получили ответ, выходим из цикла
+                break
+
+            except Exception as e:
+                error_message = str(e)
+                if "Flood control exceeded" in error_message:
+                    attempt += 1
+                    if attempt < max_retries:
+                        retry_seconds = retry_delay * attempt
+                        logger.warning(f"Превышен лимит запросов. Попытка {attempt} из {max_retries}. "
+                                     f"Ожидание {retry_seconds} секунд...")
+                        
+                        await self.application.bot.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=message_id,
+                            text=f"⏳ Превышен лимит запросов. Повторная попытка через {retry_seconds} секунд..."
+                        )
+                        
+                        await asyncio.sleep(retry_seconds)
+                        continue
+                    else:
+                        logger.error(f"Превышен лимит попыток после {max_retries} попыток")
+                        await self.application.bot.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=message_id,
+                            text="❌ Превышен лимит запросов. Пожалуйста, попробуйте позже."
+                        )
+                else:
+                    logger.error(f"Ошибка при получении ответа от OpenAI: {e}")
                     await self.application.bot.edit_message_text(
                         chat_id=chat_id,
                         message_id=message_id,
-                        text=response_buffer
+                        text="❌ Произошла ошибка при получении ответа. Пожалуйста, попробуйте позже."
                     )
-                    
-                    # Сохраняем ответ в историю
-                    settings.message_history.append({
-                        "role": "assistant",
-                        "content": response_buffer
-                    })
-                    settings_manager.save_settings()
-                except BadRequest as e:
-                    if "Message is not modified" not in str(e):
-                        logger.debug(f"Ошибка при финальном обновлении: {e}")
-
-        except Exception as e:
-            logger.error(f"Ошибка при получении ответа от OpenAI: {e}")
-            await self.application.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text="Произошла ошибка при получении ответа. Пожалуйста, попробуйте позже."
-            )
+                break
 
     async def create_image(self, prompt, **kwargs):
         """
