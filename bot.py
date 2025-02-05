@@ -25,7 +25,8 @@ from handlers import (
     handle_image_command,
     handle_custom_model_input,
     handle_base_url_input,
-    handle_image_base_url_input
+    handle_image_base_url_input,
+    handle_settings_import
 )
 from settings import SettingsManager
 
@@ -110,6 +111,15 @@ class GPTBot:
             group=3
         )
         self.application.add_handler(MessageHandler(filters.PHOTO, handle_image))
+        
+        # Добавляем обработчик для импорта настроек
+        self.application.add_handler(
+            MessageHandler(
+                filters.Document.FileExtension("json") & filters.ChatType.PRIVATE,
+                handle_settings_import
+            ),
+            group=0
+        )
 
         # Добавляем обработчики callback'ов
         self.application.add_handler(CallbackQueryHandler(

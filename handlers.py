@@ -650,4 +650,62 @@ async def handle_base_url_input(update: Update, context: ContextTypes.DEFAULT_TY
         f"✅ Установлен новый Base URL для текстовой модели: {new_base_url}\n\n"
         "📝 Настройки текстовой модели:",
         reply_markup=keyboard
-    ) 
+    )
+
+# Добавляем обработчик для импорта настроек из JSON файла
+@log_handler_call
+async def handle_settings_import(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик импорта настроек из JSON файла."""
+    if not context.user_data.get("waiting_for_settings"):
+        return
+
+    try:
+        # Проверяем, что получен документ
+        if not update.message.document:
+            await update.message.reply_text(
+                "❌ Пожалуйста, отправьте файл настроек в формате JSON."
+            )
+            return
+
+        # Проверяем расширение файла
+        if not update.message.document.file_name.endswith('.json'):
+            await update.message.reply_text(
+                "❌ Файл должен иметь расширение .json"
+            )
+            return
+
+        # Получаем файл
+        file = await context.bot.get_file(update.message.document.file_id)
+        
+        # Скачиваем содержимое файла
+        settings_json = await file.download_as_bytearray()
+        settings_str = settings_json.decode('utf-8')
+
+        # Импортируем настройки
+        user_id = update.effective_user.id
+        settings_manager.import_settings(user_id, settings_str)
+
+        # Отправляем подтверждение
+        keyboard = create_settings_keyboard()
+        await update.message.reply_text(
+            "✅ Настройки успешно импортированы!\n\n"
+            "⚙️ Настройки бота\nВыберите категорию:",
+            reply_markup=keyboard
+        )
+
+    except json.JSONDecodeError:
+        await update.message.reply_text(
+            "❌ Ошибка при чтении файла. Убедитесь, что файл содержит корректный JSON."
+        )
+    except ValueError as e:
+        await update.message.reply_text(
+            f"❌ Ошибка при импорте настроек: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при импорте настроек: {e}")
+        await update.message.reply_text(
+            "❌ Произошла ошибка при импорте настроек. Пожалуйста, попробуйте позже."
+        )
+    finally:
+        # Сбрасываем состояние ожидания
+        context.user_data["waiting_for_settings"] = False 
