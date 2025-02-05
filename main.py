@@ -24,10 +24,16 @@ async def main():
     try:
         # Создаем и запускаем бота
         bot = TelegramBot(token)
-        logger.info("Бот успешно инициализирован и запущен")
-        await bot.application.run_polling()
+        logger.info("Бот успешно инициализирован")
+        await bot.run()
+        logger.info("Бот успешно остановлен")
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {str(e)}")
 
 if __name__ == '__main__':
-    asyncio.run(main()) 
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Бот остановлен пользователем")
+    except Exception as e:
+        logger.error(f"Критическая ошибка: {str(e)}") 

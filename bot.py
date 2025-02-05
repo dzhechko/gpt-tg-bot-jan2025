@@ -17,8 +17,13 @@ class TelegramBot:
         Args:
             token (str): Токен Telegram бота
         """
-        # Создаем приложение
-        self.application = Application.builder().token(token).build()
+        # Создаем приложение с базовыми настройками
+        self.application = (
+            Application.builder()
+            .token(token)
+            .concurrent_updates(True)
+            .build()
+        )
         
         # Инициализация OpenAI клиента
         self.openai_client = OpenAI(
@@ -56,22 +61,29 @@ class TelegramBot:
 
     async def _start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /start."""
-        await handle_command(update, context, 'start')
+        if update and update.effective_chat:
+            await handle_command(update, context, 'start')
 
     async def _settings_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /settings."""
-        await handle_command(update, context, 'settings')
+        if update and update.effective_chat:
+            await handle_command(update, context, 'settings')
 
     async def _clear_history_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /clear_history."""
-        await handle_command(update, context, 'clear_history')
+        if update and update.effective_chat:
+            await handle_command(update, context, 'clear_history')
 
     async def _button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик нажатий кнопок."""
-        await handle_callback(update, context)
+        if update and update.callback_query:
+            await handle_callback(update, context)
 
     async def _handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик текстовых сообщений."""
+        if not update or not update.effective_chat:
+            return
+            
         # Проверяем, не является ли это описанием для изображения
         if context.user_data.get('image_processing'):
             await self.media_handler.handle_image_with_text(update, context)
@@ -80,11 +92,13 @@ class TelegramBot:
 
     async def _handle_voice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик голосовых сообщений."""
-        await self.media_handler.handle_voice(update, context)
+        if update and update.effective_chat:
+            await self.media_handler.handle_voice(update, context)
 
     async def _handle_image(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик изображений."""
-        await self.media_handler.handle_image(update, context)
+        if update and update.effective_chat:
+            await self.media_handler.handle_image(update, context)
 
     async def stream_gpt_response(self, messages: list, chat_id: int, message_id: int, context: Any) -> None:
         """
@@ -188,6 +202,9 @@ class TelegramBot:
             log_error('initial_message', str(e))
             return None
 
-    def run(self):
+    async def run(self):
         """Запуск бота в режиме polling."""
-        self.application.run_polling() 
+        await self.application.initialize()
+        await self.application.start()
+        await self.application.run_polling()
+        await self.application.stop() 
