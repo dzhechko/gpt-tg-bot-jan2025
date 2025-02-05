@@ -189,7 +189,7 @@ class GPTBot:
     async def _error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Обработчик ошибок бота."""
         try:
-            if update and update.effective_message:
+            if update and update.effective_message and update.effective_chat:
                 chat_id = update.effective_chat.id
                 error_text = "Произошла ошибка при обработке запроса. Попробуйте позже или обратитесь к администратору."
                 
@@ -204,7 +204,7 @@ class GPTBot:
                     logger.error(f"Необработанная ошибка: {context.error}")
                 
                 try:
-                    # Пробуем отправить новое сообщение вместо редактирования
+                    # Пробуем отправить новое сообщение
                     await context.bot.send_message(
                         chat_id=chat_id,
                         text=error_text
@@ -212,9 +212,15 @@ class GPTBot:
                 except Exception as send_error:
                     logger.error(f"Не удалось отправить сообщение об ошибке: {send_error}")
             else:
+                # Если update или его компоненты отсутствуют, логируем это
                 logger.error(f"Ошибка без контекста сообщения: {context.error}")
+                logger.debug(f"Update объект: {update}")
+                if update:
+                    logger.debug(f"Update effective_message: {update.effective_message}")
+                    logger.debug(f"Update effective_chat: {update.effective_chat}")
         except Exception as e:
             logger.error(f"Ошибка в обработчике ошибок: {e}")
+            logger.debug(f"Полный контекст ошибки: {context.error.__traceback__}")
 
     async def stream_chat_completion(self, messages, chat_id, message_id, context):
         """
