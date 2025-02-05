@@ -92,11 +92,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "Генерирую ответ..."
         )
         
-        # Получаем экземпляр бота для доступа к OpenAI клиенту
-        bot = context.application.bot
+        # Получаем экземпляр GPTBot из контекста
+        gpt_bot = context.application.bot_data['gpt_bot']
         
         # Отправляем запрос к модели с использованием streaming
-        await bot.stream_chat_completion(
+        await gpt_bot.stream_chat_completion(
             messages=settings.message_history,
             chat_id=update.effective_chat.id,
             message_id=initial_message.message_id,

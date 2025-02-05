@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import Update, Bot
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -55,6 +55,9 @@ class GPTBot:
         else:
             logger.add("production.log", rotation="500 MB", level="INFO")
 
+        # Создаем Telegram бота
+        self.telegram_bot = Bot(token=self.token)
+        
         # Создаем приложение
         self.application = Application.builder().token(self.token).build()
         
@@ -119,7 +122,7 @@ class GPTBot:
                     
                     try:
                         # Обновляем сообщение в Telegram с каждым новым фрагментом
-                        await context.bot.edit_message_text(
+                        await self.telegram_bot.edit_message_text(
                             chat_id=chat_id,
                             message_id=message_id,
                             text=response_buffer
@@ -139,7 +142,7 @@ class GPTBot:
 
         except Exception as e:
             logger.error(f"Ошибка при получении ответа от OpenAI: {e}")
-            await context.bot.edit_message_text(
+            await self.telegram_bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=message_id,
                 text="Произошла ошибка при получении ответа. Пожалуйста, попробуйте позже."
@@ -172,8 +175,8 @@ class GPTBot:
     def run(self):
         """Запуск бота."""
         try:
-            # Устанавливаем себя как свойство приложения
-            self.application.bot = self
+            # Добавляем GPTBot как пользовательское свойство контекста
+            self.application.bot_data['gpt_bot'] = self
             
             # Запускаем бота
             logger.info("Бот запущен")
