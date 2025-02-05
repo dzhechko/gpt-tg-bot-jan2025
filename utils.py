@@ -112,7 +112,7 @@ def validate_max_tokens(value: Any) -> Tuple[bool, int]:
     except ValueError:
         return False, "Некорректное значение токенов"
 
-async def log_handler_call(func):
+def log_handler_call(func):
     """Декоратор для логирования вызовов обработчиков."""
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         if DEBUG:
