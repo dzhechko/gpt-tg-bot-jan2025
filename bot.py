@@ -21,12 +21,16 @@ from handlers import (
     handle_text_model_settings,
     handle_image_model_settings
 )
+from settings import SettingsManager
 
 # Загрузка переменных окружения
 load_dotenv()
 
 # Включение/выключение режима отладки
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+
+# Инициализация менеджера настроек
+settings_manager = SettingsManager()
 
 class GPTBot:
     def __init__(self):
@@ -66,32 +70,40 @@ class GPTBot:
             stream = self.openai_client.chat.completions.create(
                 model=os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo'),
                 messages=messages,
-                stream=True
+                stream=True,
+                temperature=0.7,
+                max_tokens=2000
             )
 
             # Буфер для накопления частей ответа
             response_buffer = ""
             
-            # Обрабатываем поток ответов
-            for chunk in stream:
+            # Обрабатываем поток ответов в реальном времени
+            async for chunk in stream:
                 if chunk.choices[0].delta.content is not None:
-                    response_buffer += chunk.choices[0].delta.content
+                    # Получаем часть ответа
+                    content = chunk.choices[0].delta.content
+                    response_buffer += content
                     
-                    # Обновляем сообщение каждые N символов или при специальных символах
-                    if len(response_buffer) >= 50 or '\n' in response_buffer:
+                    try:
+                        # Обновляем сообщение в Telegram с каждым новым фрагментом
                         await context.bot.edit_message_text(
                             chat_id=chat_id,
                             message_id=message_id,
                             text=response_buffer
                         )
+                    except Exception as e:
+                        logger.debug(f"Ошибка при обновлении сообщения: {e}")
+                        # Продолжаем получать ответ даже если произошла ошибка обновления
 
-            # Отправляем оставшуюся часть ответа
+            # Сохраняем ответ в историю
             if response_buffer:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=response_buffer
-                )
+                settings = settings_manager.get_user_settings(chat_id)
+                settings.message_history.append({
+                    "role": "assistant",
+                    "content": response_buffer
+                })
+                settings_manager.save_settings()
 
         except Exception as e:
             logger.error(f"Ошибка при получении ответа от OpenAI: {e}")
@@ -130,6 +142,9 @@ class GPTBot:
         try:
             # Создаем приложение
             application = Application.builder().token(self.token).build()
+            
+            # Устанавливаем себя как свойство приложения
+            application.bot = self
 
             # Добавляем обработчики команд
             application.add_handler(CommandHandler('start', start_command))

@@ -80,17 +80,37 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user_id = update.effective_user.id
     settings = settings_manager.get_user_settings(user_id)
     
-    # Добавляем сообщение в историю
-    settings.message_history.append({
-        "role": "user",
-        "content": update.message.text
-    })
-    
-    # TODO: Реализовать streaming ответ от модели
-    # Пока просто заглушка
-    await update.message.reply_text(
-        "Извините, функция обработки текста временно недоступна."
-    )
+    try:
+        # Добавляем сообщение пользователя в историю
+        settings.message_history.append({
+            "role": "user",
+            "content": update.message.text
+        })
+        
+        # Отправляем начальное сообщение
+        initial_message = await update.message.reply_text(
+            "Генерирую ответ..."
+        )
+        
+        # Получаем экземпляр бота для доступа к OpenAI клиенту
+        bot = context.application.bot
+        
+        # Отправляем запрос к модели с использованием streaming
+        await bot.stream_chat_completion(
+            messages=settings.message_history,
+            chat_id=update.effective_chat.id,
+            message_id=initial_message.message_id,
+            context=context
+        )
+        
+        # Сохраняем обновленную историю
+        settings_manager.save_settings()
+        
+    except Exception as e:
+        logger.error(f"Ошибка при обработке текстового сообщения: {e}")
+        await update.message.reply_text(
+            "Произошла ошибка при обработке сообщения. Пожалуйста, попробуйте позже."
+        )
 
 @log_handler_call
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
