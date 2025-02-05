@@ -884,7 +884,9 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     broadcast_message = " ".join(context.args)
     success_count = 0
     fail_count = 0
+    sender_id = update.effective_user.id
     
+    # Отправляем сообщение всем пользователям
     for user_id in settings_manager.users:
         try:
             await context.bot.send_message(
@@ -892,14 +894,32 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 text=f"📢 Сообщение от администратора:\n\n{broadcast_message}"
             )
             success_count += 1
+            logger.info(f"Сообщение успешно отправлено пользователю {user_id}")
         except Exception as e:
             logger.error(f"Ошибка отправки сообщения пользователю {user_id}: {e}")
             fail_count += 1
     
-    await update.message.reply_text(
+    # Отправляем отчет о результатах
+    report = (
         f"✅ Сообщение отправлено {success_count} пользователям\n"
-        f"❌ Не удалось отправить {fail_count} пользователям"
+        f"❌ Не удалось отправить {fail_count} пользователям\n\n"
+        f"📝 Текст сообщения:\n{broadcast_message}"
     )
+    
+    try:
+        # Отправляем отчет в чат, где была вызвана команда
+        await update.message.reply_text(report)
+        logger.info(f"Отчет о рассылке отправлен в чат {update.effective_chat.id}")
+    except Exception as e:
+        logger.error(f"Ошибка при отправке отчета в чат {update.effective_chat.id}: {e}")
+        # Пробуем отправить отчет администратору лично
+        try:
+            await context.bot.send_message(
+                chat_id=sender_id,
+                text=f"❌ Не удалось отправить отчет в чат, но вот результаты:\n\n{report}"
+            )
+        except Exception as e2:
+            logger.error(f"Не удалось отправить отчет администратору {sender_id}: {e2}")
 
 @admin_required
 async def logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
