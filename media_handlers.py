@@ -12,19 +12,28 @@ class MediaHandler:
         self.temp_dir = "temp"
         ensure_directory(self.temp_dir)
         
-        # Инициализация распознавания речи
-        self.recognizer = sr.Recognizer()
-        
-        # Инициализация синтеза речи
-        self.engine = pyttsx3.init()
-        self.engine.setProperty('rate', 150)
-        self.engine.setProperty('voice', 'russian')
+        # Инициализация распознавания речи и синтеза с обработкой ошибок
+        self.voice_enabled = True
+        try:
+            self.recognizer = sr.Recognizer()
+            self.engine = pyttsx3.init()
+            self.engine.setProperty('rate', 150)
+            self.engine.setProperty('voice', 'russian')
+        except Exception as e:
+            log_error('voice_init', f"Voice features disabled: {str(e)}")
+            self.voice_enabled = False
 
     async def handle_voice(self, update: Update, context: CallbackContext) -> None:
         """
         Обработка голосовых сообщений.
         Конвертирует голос в текст и отправляет ответ.
         """
+        if not self.voice_enabled:
+            await update.message.reply_text(
+                "Извините, голосовые функции временно недоступны. Пожалуйста, используйте текстовые сообщения."
+            )
+            return
+
         try:
             # Получаем файл голосового сообщения
             voice = update.message.voice
@@ -178,6 +187,13 @@ class MediaHandler:
             chat_id (int): ID чата
             context (CallbackContext): Контекст бота
         """
+        if not self.voice_enabled:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="Извините, голосовые функции временно недоступны."
+            )
+            return
+
         try:
             voice_path = os.path.join(self.temp_dir, f"voice_response_{chat_id}.mp3")
             self.engine.save_to_file(text, voice_path)
