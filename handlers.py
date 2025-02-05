@@ -322,6 +322,7 @@ async def handle_text_model_settings(update: Update, context: ContextTypes.DEFAU
     
     user_id = update.effective_user.id
     settings = settings_manager.get_user_settings(user_id)
+    logger.debug(f"Processing text model settings for user {user_id}, data: {query.data}")
     
     if query.data == "change_text_model":
         models = settings.text_settings.available_models

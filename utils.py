@@ -36,10 +36,11 @@ def create_settings_keyboard() -> InlineKeyboardMarkup:
 
 def create_text_settings_keyboard(current_settings: dict) -> InlineKeyboardMarkup:
     """Создает клавиатуру для настроек текстовой модели."""
+    logger.debug(f"Creating text settings keyboard with settings: {current_settings}")
     buttons = [
         [("🔄 Изменить модель", "change_text_model")],
-        [(f"🌡 Температура: {current_settings['temperature']}", "change_temperature")],
-        [(f"📊 Макс. токенов: {current_settings['max_tokens']}", "change_max_tokens")],
+        [(f"🌡 Температура: {current_settings.get('temperature', 0.7)}", "change_temperature")],
+        [(f"📊 Макс. токенов: {current_settings.get('max_tokens', 1000)}", "change_max_tokens")],
         [("🔙 Назад", "back_to_main"), ("❌ Закрыть", "close_settings")]
     ]
     return create_menu_keyboard(buttons)

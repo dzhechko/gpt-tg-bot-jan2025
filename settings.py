@@ -27,6 +27,12 @@ class TextModelSettings(BaseModel):
     def available_models(self):
         return ["gpt-4o-mini", "gpt-4o", "gpt-4", "claude-3-sonnet"]
 
+    def dict(self, *args, **kwargs):
+        """Переопределяем метод dict для включения свойств в сериализацию"""
+        d = super().dict(*args, **kwargs)
+        d['available_models'] = self.available_models
+        return d
+
 class ImageModelSettings(BaseModel):
     base_url: str = "https://api.openai.com/v1"
     model: str = "dall-e-3"
@@ -71,6 +77,16 @@ class ImageModelSettings(BaseModel):
     @property
     def supports_hdr(self):
         return self.model_capabilities[self.model]["hdr"]
+
+    def dict(self, *args, **kwargs):
+        """Переопределяем метод dict для включения свойств в сериализацию"""
+        d = super().dict(*args, **kwargs)
+        d['available_models'] = self.available_models
+        d['available_sizes'] = self.available_sizes
+        d['available_qualities'] = self.available_qualities
+        d['available_styles'] = self.available_styles
+        d['supports_hdr'] = self.supports_hdr
+        return d
 
 class UserSettings(BaseModel):
     user_id: int
