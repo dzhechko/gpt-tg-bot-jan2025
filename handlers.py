@@ -17,6 +17,7 @@ from utils import (
     check_user_access_decorator,
     check_user_access
 )
+import sys
 
 settings_manager = SettingsManager()
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
@@ -43,6 +44,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """Обработчик команды /help."""
     user_id = update.effective_user.id
     has_access = check_user_access(user_id)
+    is_admin = user_id in map(int, filter(None, os.getenv('ADMIN_USER_IDS', '').split(',')))
     
     base_help_text = (
         "🤖 Основные команды:\n\n"
@@ -70,6 +72,26 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "- Историю можно экспортировать/импортировать\n"
             "- Доступ к боту ограничен списком разрешенных пользователей"
         )
+        
+        # Добавляем административные команды для администраторов
+        if is_admin:
+            help_text += (
+                "\n\n👑 Административные команды:\n"
+                "Управление пользователями:\n"
+                "/adduser ID - добавить пользователя\n"
+                "/removeuser ID - удалить пользователя\n"
+                "/listusers - список пользователей\n\n"
+                "Управление группами:\n"
+                "/addgroup ID - добавить группу\n"
+                "/removegroup ID - удалить группу\n"
+                "/listgroups - список групп\n\n"
+                "Мониторинг и управление:\n"
+                "/stats - статистика использования\n"
+                "/logs - последние логи\n"
+                "/broadcast - отправить сообщение всем\n"
+                "/restart - перезапуск бота\n"
+                "/maintenance on/off - режим обслуживания"
+            )
     else:
         # Базовая справка для пользователей без доступа
         help_text = (
@@ -131,13 +153,41 @@ async def show_current_settings_command(update: Update, context: ContextTypes.DE
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик текстовых сообщений."""
     user_id = update.effective_user.id
+    
+    # Проверяем режим обслуживания
+    if check_maintenance_mode() and not is_admin(user_id):
+        await update.message.reply_text(
+            "🛠 Бот находится в режиме обслуживания.\n"
+            "Пожалуйста, попробуйте позже."
+        )
+        return
+    
     settings = settings_manager.get_user_settings(user_id)
+    is_group = update.effective_chat.type in ['group', 'supergroup']
+    
+    # В группах обрабатываем только сообщения, начинающиеся с /gpt или @имя_бота
+    if is_group:
+        message_text = update.message.text
+        bot_username = context.bot.username
+        
+        # Проверяем, начинается ли сообщение с команды /gpt или @имя_бота
+        if not (message_text.startswith('/gpt ') or 
+                message_text.startswith(f'@{bot_username} ')):
+            return
+        
+        # Убираем префикс команды из сообщения
+        if message_text.startswith('/gpt '):
+            actual_message = message_text[5:].strip()
+        else:
+            actual_message = message_text[len(bot_username) + 2:].strip()
+    else:
+        actual_message = update.message.text
     
     try:
         # Добавляем сообщение пользователя в историю
         settings.message_history.append({
             "role": "user",
-            "content": update.message.text
+            "content": actual_message
         })
         
         # Отправляем начальное сообщение
@@ -169,6 +219,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def handle_image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команд /image и /img."""
     user_id = update.effective_user.id
+    
+    # Проверяем режим обслуживания
+    if check_maintenance_mode() and not is_admin(user_id):
+        await update.message.reply_text(
+            "🛠 Бот находится в режиме обслуживания.\n"
+            "Пожалуйста, попробуйте позже."
+        )
+        return
+    
     settings = settings_manager.get_user_settings(user_id)
     
     # Получаем текст после команды
@@ -221,6 +280,15 @@ async def handle_image_command(update: Update, context: ContextTypes.DEFAULT_TYP
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик изображений."""
     user_id = update.effective_user.id
+    
+    # Проверяем режим обслуживания
+    if check_maintenance_mode() and not is_admin(user_id):
+        await update.message.reply_text(
+            "🛠 Бот находится в режиме обслуживания.\n"
+            "Пожалуйста, попробуйте позже."
+        )
+        return
+    
     settings = settings_manager.get_user_settings(user_id)
     
     # Получаем изображение и подпись
@@ -741,11 +809,279 @@ async def handle_settings_import(update: Update, context: ContextTypes.DEFAULT_T
 
 @check_user_access_decorator
 async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Показывает Telegram ID пользователя."""
+    """Показывает Telegram ID пользователя и группы."""
     user = update.effective_user
+    chat = update.effective_chat
+    
+    # Базовая информация о пользователе
+    response = [
+        f"👤 Ваш Telegram ID: `{user.id}`",
+        f"Username: @{user.username}",
+        f"Имя: {user.first_name}"
+    ]
+    
+    # Добавляем информацию о группе, если команда вызвана в группе
+    if chat.type in ['group', 'supergroup']:
+        response.extend([
+            "\n📢 Информация о группе:",
+            f"Название: {chat.title}",
+            f"ID группы: `{chat.id}`",
+            "\n💡 Для добавления группы в список разрешенных, используйте этот ID в переменной ALLOWED_GROUPS"
+        ])
+    
     await update.message.reply_text(
-        f"👤 Ваш Telegram ID: `{user.id}`\n"
-        f"Username: @{user.username}\n"
-        f"Имя: {user.first_name}",
+        "\n".join(response),
         parse_mode='Markdown'
-    ) 
+    )
+
+def is_admin(user_id: int) -> bool:
+    """Проверяет, является ли пользователь администратором."""
+    admin_ids = os.getenv('ADMIN_USER_IDS', '').split(',')
+    try:
+        admin_ids = [int(admin_id.strip()) for admin_id in admin_ids if admin_id.strip().isdigit()]
+        return user_id in admin_ids
+    except Exception as e:
+        logger.error(f"Ошибка при проверке прав администратора: {e}")
+        return False
+
+def admin_required(func):
+    """Декоратор для проверки прав администратора."""
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user_id = update.effective_user.id
+        if not is_admin(user_id):
+            await update.message.reply_text(
+                "⛔️ Эта команда доступна только администраторам бота."
+            )
+            return None
+        return await func(update, context, *args, **kwargs)
+    return wrapper
+
+@admin_required
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Показывает статистику использования бота."""
+    total_users = len(settings_manager.users)
+    total_messages = sum(len(settings.message_history) for settings in settings_manager.users.values())
+    
+    stats_text = (
+        "📊 Статистика бота:\n\n"
+        f"👥 Всего пользователей: {total_users}\n"
+        f"💬 Всего сообщений: {total_messages}\n"
+        f"🕒 Бот работает с: {context.bot_data.get('start_time', 'неизвестно')}"
+    )
+    await update.message.reply_text(stats_text)
+
+@admin_required
+async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отправляет сообщение всем пользователям бота."""
+    if len(context.args) == 0:
+        await update.message.reply_text(
+            "Пожалуйста, добавьте текст сообщения после команды.\n"
+            "Пример: /broadcast Технические работы сегодня в 18:00"
+        )
+        return
+    
+    broadcast_message = " ".join(context.args)
+    success_count = 0
+    fail_count = 0
+    
+    for user_id in settings_manager.users:
+        try:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"📢 Сообщение от администратора:\n\n{broadcast_message}"
+            )
+            success_count += 1
+        except Exception as e:
+            logger.error(f"Ошибка отправки сообщения пользователю {user_id}: {e}")
+            fail_count += 1
+    
+    await update.message.reply_text(
+        f"✅ Сообщение отправлено {success_count} пользователям\n"
+        f"❌ Не удалось отправить {fail_count} пользователям"
+    )
+
+@admin_required
+async def logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отправляет последние логи бота."""
+    try:
+        log_file = "debug.log" if DEBUG else "production.log"
+        with open(log_file, 'r', encoding='utf-8') as f:
+            # Читаем последние 50 строк
+            lines = f.readlines()[-50:]
+            logs = "📋 Последние логи:\n\n" + "".join(lines)
+            
+            # Если текст слишком длинный, отправляем файлом
+            if len(logs) > 4000:
+                await context.bot.send_document(
+                    chat_id=update.effective_chat.id,
+                    document=log_file.encode(),
+                    filename=log_file,
+                    caption="📋 Лог-файл бота"
+                )
+            else:
+                await update.message.reply_text(logs)
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка при чтении логов: {e}")
+
+@admin_required
+async def manage_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Управление списком разрешенных пользователей."""
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "Используйте:\n"
+            "/adduser ID - добавить пользователя\n"
+            "/removeuser ID - удалить пользователя\n"
+            "/listusers - показать список пользователей"
+        )
+        return
+    
+    action = context.args[0].lower()
+    user_id = context.args[1]
+    
+    allowed_users = os.getenv('ALLOWED_USERS', '').split(',')
+    
+    if action == "add":
+        if user_id not in allowed_users:
+            allowed_users.append(user_id)
+            os.environ['ALLOWED_USERS'] = ','.join(allowed_users)
+            await update.message.reply_text(f"✅ Пользователь {user_id} добавлен")
+    elif action == "remove":
+        if user_id in allowed_users:
+            allowed_users.remove(user_id)
+            os.environ['ALLOWED_USERS'] = ','.join(allowed_users)
+            await update.message.reply_text(f"✅ Пользователь {user_id} удален")
+    elif action == "list":
+        users_list = "📋 Список разрешенных пользователей:\n\n" + "\n".join(allowed_users)
+        await update.message.reply_text(users_list)
+    else:
+        await update.message.reply_text("❌ Неизвестное действие") 
+
+@admin_required
+async def manage_groups_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Управление списком разрешенных групп."""
+    if len(context.args) < 1:
+        await update.message.reply_text(
+            "Используйте:\n"
+            "/addgroup ID - добавить группу\n"
+            "/removegroup ID - удалить группу\n"
+            "/listgroups - показать список групп"
+        )
+        return
+    
+    action = context.args[0].lower()
+    
+    if action not in ["add", "remove", "list"] and len(context.args) < 2:
+        await update.message.reply_text("❌ Не указан ID группы")
+        return
+    
+    allowed_groups = os.getenv('ALLOWED_GROUPS', '').split(',')
+    allowed_groups = [g.strip() for g in allowed_groups if g.strip()]
+    
+    if action == "add" and len(context.args) >= 2:
+        group_id = context.args[1]
+        if not group_id.startswith('-100'):
+            await update.message.reply_text("❌ ID группы должен начинаться с -100")
+            return
+        
+        if group_id not in allowed_groups:
+            allowed_groups.append(group_id)
+            os.environ['ALLOWED_GROUPS'] = ','.join(allowed_groups)
+            await update.message.reply_text(f"✅ Группа {group_id} добавлена")
+        else:
+            await update.message.reply_text("ℹ️ Эта группа уже в списке разрешенных")
+    
+    elif action == "remove" and len(context.args) >= 2:
+        group_id = context.args[1]
+        if group_id in allowed_groups:
+            allowed_groups.remove(group_id)
+            os.environ['ALLOWED_GROUPS'] = ','.join(allowed_groups)
+            await update.message.reply_text(f"✅ Группа {group_id} удалена")
+        else:
+            await update.message.reply_text("ℹ️ Этой группы нет в списке разрешенных")
+    
+    elif action == "list":
+        if not allowed_groups:
+            await update.message.reply_text("📋 Список разрешенных групп пуст")
+        else:
+            groups_list = "📋 Список разрешенных групп:\n\n" + "\n".join(allowed_groups)
+            await update.message.reply_text(groups_list)
+    else:
+        await update.message.reply_text("❌ Неизвестное действие")
+
+@admin_required
+async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Перезапуск бота."""
+    await update.message.reply_text("🔄 Перезапуск бота...")
+    logger.info("Получена команда перезапуска от администратора")
+    
+    # Отправляем сообщение всем пользователям
+    for user_id in settings_manager.users:
+        try:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🔄 Бот перезапускается для обновления. Пожалуйста, подождите несколько минут."
+            )
+        except Exception as e:
+            logger.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
+    
+    # Сохраняем все настройки
+    settings_manager.save_settings()
+    
+    # Перезапускаем программу
+    os.execl(sys.executable, sys.executable, *sys.argv)
+
+@admin_required
+async def maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Управление режимом обслуживания."""
+    if len(context.args) != 1 or context.args[0].lower() not in ['on', 'off']:
+        await update.message.reply_text(
+            "Используйте:\n"
+            "/maintenance on - включить режим обслуживания\n"
+            "/maintenance off - выключить режим обслуживания"
+        )
+        return
+    
+    mode = context.args[0].lower()
+    maintenance_file = "maintenance_mode"
+    
+    if mode == "on":
+        # Включаем режим обслуживания
+        with open(maintenance_file, 'w') as f:
+            f.write('1')
+        
+        # Отправляем сообщение всем пользователям
+        for user_id in settings_manager.users:
+            try:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="🛠 Бот переходит в режим обслуживания. Некоторые функции могут быть недоступны."
+                )
+            except Exception as e:
+                logger.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
+        
+        await update.message.reply_text("✅ Режим обслуживания включен")
+        logger.info("Включен режим обслуживания")
+    
+    else:
+        # Выключаем режим обслуживания
+        try:
+            os.remove(maintenance_file)
+        except FileNotFoundError:
+            pass
+        
+        # Отправляем сообщение всем пользователям
+        for user_id in settings_manager.users:
+            try:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="✅ Бот вернулся к нормальной работе."
+                )
+            except Exception as e:
+                logger.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
+        
+        await update.message.reply_text("✅ Режим обслуживания выключен")
+        logger.info("Выключен режим обслуживания")
+
+def check_maintenance_mode() -> bool:
+    """Проверяет, включен ли режим обслуживания."""
+    return os.path.exists("maintenance_mode") 

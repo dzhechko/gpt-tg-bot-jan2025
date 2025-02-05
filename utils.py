@@ -43,10 +43,46 @@ def check_user_access(user_id: int) -> bool:
         logger.error(f"Ошибка при проверке доступа: {e}")
         return False
 
+def check_group_access(chat_id: int) -> bool:
+    """
+    Проверяет, имеет ли группа доступ к боту.
+    
+    Args:
+        chat_id: ID группы Telegram
+    
+    Returns:
+        bool: True если группа имеет доступ, False в противном случае
+    """
+    allowed_groups = os.getenv('ALLOWED_GROUPS')
+    
+    # Если переменная ALLOWED_GROUPS не задана, разрешаем доступ всем группам
+    if not allowed_groups:
+        return True
+    
+    try:
+        # Преобразуем строку с ID в список чисел
+        allowed_ids = [int(gid.strip()) for gid in allowed_groups.split(',') if gid.strip().isdigit()]
+        
+        # Если список пустой после обработки, разрешаем доступ всем группам
+        if not allowed_ids:
+            return True
+        
+        # Проверяем наличие ID группы в списке разрешенных
+        has_access = chat_id in allowed_ids
+        if not has_access:
+            logger.warning(f"Попытка доступа из неразрешенной группы {chat_id}")
+        return has_access
+        
+    except Exception as e:
+        logger.error(f"Ошибка при проверке доступа группы: {e}")
+        return False
+
 def check_user_access_decorator(func):
     """Декоратор для проверки доступа пользователя к командам бота."""
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
+        chat_id = update.effective_chat.id
+        is_group = update.effective_chat.type in ['group', 'supergroup']
         
         # Список команд, доступных всем пользователям
         public_commands = ['myid_command', 'help_command', 'start_command']
@@ -55,17 +91,37 @@ def check_user_access_decorator(func):
         if func.__name__ in public_commands:
             return await func(update, context, *args, **kwargs)
         
-        # Для остальных команд проверяем доступ
-        if check_user_access(user_id):
-            return await func(update, context, *args, **kwargs)
+        # Проверяем доступ в зависимости от типа чата
+        if is_group:
+            # Для групп проверяем и доступ группы, и доступ пользователя
+            if not check_group_access(chat_id):
+                logger.warning(f"Попытка использования бота в неразрешенной группе {chat_id}")
+                await update.message.reply_text(
+                    "⛔️ Этот бот не настроен для использования в данной группе.\n"
+                    "Администратор группы может связаться с владельцем бота для получения доступа: @djdim"
+                )
+                return None
+            
+            if not check_user_access(user_id):
+                logger.warning(f"Попытка несанкционированного доступа от пользователя {user_id} в группе {chat_id}")
+                await update.message.reply_text(
+                    f"⛔️ У пользователя @{update.effective_user.username} нет доступа к боту.\n\n"
+                    "Используйте /help для получения информации или /myid чтобы узнать свой Telegram ID.\n\n"
+                    "Для получения доступа свяжитесь с администратором: @djdim"
+                )
+                return None
         else:
-            logger.warning(f"Попытка несанкционированного доступа от пользователя {user_id}")
-            await update.message.reply_text(
-                "⛔️ У вас нет доступа к этому боту.\n\n"
-                "Используйте /help для получения информации или /myid чтобы узнать свой Telegram ID.\n\n"
-                "Для получения доступа свяжитесь с администратором: @djdim"
-            )
-            return None
+            # Для личных чатов проверяем только доступ пользователя
+            if not check_user_access(user_id):
+                logger.warning(f"Попытка несанкционированного доступа от пользователя {user_id}")
+                await update.message.reply_text(
+                    "⛔️ У вас нет доступа к этому боту.\n\n"
+                    "Используйте /help для получения информации или /myid чтобы узнать свой Telegram ID.\n\n"
+                    "Для получения доступа свяжитесь с администратором: @djdim"
+                )
+                return None
+        
+        return await func(update, context, *args, **kwargs)
     return wrapper
 
 def create_menu_keyboard(buttons: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup:

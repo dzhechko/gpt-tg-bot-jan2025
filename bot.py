@@ -27,7 +27,15 @@ from handlers import (
     handle_base_url_input,
     handle_image_base_url_input,
     handle_settings_import,
-    myid_command
+    myid_command,
+    stats_command,
+    broadcast_command,
+    logs_command,
+    manage_users_command,
+    manage_groups_command,
+    restart_command,
+    maintenance_command,
+    check_maintenance_mode
 )
 from settings import SettingsManager
 import asyncio
@@ -83,6 +91,18 @@ class GPTBot:
         self.application.add_handler(CommandHandler('current_settings', show_current_settings_command))
         self.application.add_handler(CommandHandler(['image', 'img'], handle_image_command))
         self.application.add_handler(CommandHandler('myid', myid_command))
+        self.application.add_handler(CommandHandler('gpt', handle_text))
+
+        # Добавляем административные команды
+        self.application.add_handler(CommandHandler('stats', stats_command))
+        self.application.add_handler(CommandHandler('broadcast', broadcast_command))
+        self.application.add_handler(CommandHandler('logs', logs_command))
+        self.application.add_handler(CommandHandler(['adduser', 'removeuser', 'listusers'], manage_users_command))
+        
+        # Добавляем новые административные команды
+        self.application.add_handler(CommandHandler(['addgroup', 'removegroup', 'listgroups'], manage_groups_command))
+        self.application.add_handler(CommandHandler('restart', restart_command))
+        self.application.add_handler(CommandHandler('maintenance', maintenance_command))
 
         # Добавляем обработчики сообщений
         self.application.add_handler(
