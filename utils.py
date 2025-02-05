@@ -1,173 +1,152 @@
-import openai
-import logging
-import requests
-import os
+from typing import Optional, Tuple, Any
+from loguru import logger
 import json
-from typing import Tuple, Optional, Dict, Any
-from logger import log_error
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+import os
 
-DEBUG = True  # Флаг отладки, можно переключать для вывода отладочной информации
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
-def stream_chat_completion(user_message, model="gpt-4o-mini"):
+def create_menu_keyboard(buttons: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup:
     """
-    Функция для реализации streaming chat completion с использованием OpenAI API.
-    Отправляем запрос и обрабатываем потоковые ответы.
-    """
-    try:
-        # Отправляем запрос с параметром stream=True
-        response = openai.ChatCompletion.create(
-            model=model,
-            messages=[{"role": "user", "content": user_message}],
-            stream=True
-        )
-        # Обрабатываем потоковый ответ по частям
-        for chunk in response:
-            delta = chunk.get("choices", [{}])[0].get("delta", {})
-            content = delta.get("content")
-            if content:
-                print(content, end="", flush=True)
-        print()  # Перевод строки после завершения ответа
-    except Exception as e:
-        logging.error("Ошибка в stream_chat_completion: %s", str(e))
-
-def validate_temperature(value: Any) -> Tuple[bool, float | str]:
-    """
-    Валидация значения температуры для модели.
+    Создает клавиатуру из списка кнопок.
     
     Args:
-        value: Значение для проверки
-        
+        buttons: Список списков кнопок в формате [(текст, callback_data), ...]
+    """
+    keyboard = []
+    for row in buttons:
+        keyboard_row = []
+        for text, callback_data in row:
+            keyboard_row.append(InlineKeyboardButton(text, callback_data=callback_data))
+        keyboard.append(keyboard_row)
+    return InlineKeyboardMarkup(keyboard)
+
+def create_settings_keyboard() -> InlineKeyboardMarkup:
+    """Создает клавиатуру для главного меню настроек."""
+    buttons = [
+        [("📝 Настройки текста", "text_settings")],
+        [("🎨 Настройки изображений", "image_settings")],
+        [("🗑 Очистить историю", "clear_history")],
+        [("💾 Экспорт настроек", "export_settings"),
+         ("📥 Импорт настроек", "import_settings")],
+        [("❌ Закрыть", "close_settings")]
+    ]
+    return create_menu_keyboard(buttons)
+
+def create_text_settings_keyboard(current_settings: dict) -> InlineKeyboardMarkup:
+    """Создает клавиатуру для настроек текстовой модели."""
+    buttons = [
+        [("🔄 Изменить модель", "change_text_model")],
+        [(f"🌡 Температура: {current_settings['temperature']}", "change_temperature")],
+        [(f"📊 Макс. токенов: {current_settings['max_tokens']}", "change_max_tokens")],
+        [("🔙 Назад", "back_to_main"), ("❌ Закрыть", "close_settings")]
+    ]
+    return create_menu_keyboard(buttons)
+
+def create_image_settings_keyboard(current_settings: dict) -> InlineKeyboardMarkup:
+    """Создает клавиатуру для настроек модели изображений."""
+    buttons = [
+        [("🔄 Изменить модель", "change_image_model")],
+        [(f"📏 Размер: {current_settings['size']}", "change_size")],
+        [(f"✨ Качество: {current_settings['quality']}", "change_quality")],
+        [(f"🎨 Стиль: {current_settings['style']}", "change_style")],
+        [(f"HDR: {'Вкл' if current_settings['hdr'] else 'Выкл'}", "toggle_hdr")],
+        [("🔙 Назад", "back_to_main"), ("❌ Закрыть", "close_settings")]
+    ]
+    return create_menu_keyboard(buttons)
+
+async def send_confirmation_dialog(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    action: str,
+    callback_data: str
+) -> None:
+    """
+    Отправляет диалог подтверждения действия.
+    
+    Args:
+        update: Объект обновления Telegram
+        context: Контекст бота
+        action: Описание действия
+        callback_data: Данные для callback
+    """
+    buttons = [
+        [("✅ Да", f"confirm_{callback_data}"),
+         ("❌ Нет", "cancel_confirmation")]
+    ]
+    keyboard = create_menu_keyboard(buttons)
+    
+    await update.callback_query.edit_message_text(
+        f"Вы уверены, что хотите {action}?",
+        reply_markup=keyboard
+    )
+
+def validate_temperature(value: Any) -> Tuple[bool, float]:
+    """
+    Проверяет значение температуры.
+    
     Returns:
-        Tuple[bool, Union[float, str]]: (успех, значение/сообщение об ошибке)
+        Tuple[bool, float]: (успех, значение/сообщение об ошибке)
     """
     try:
-        val = float(value)
-        if 0 <= val <= 1:
-            return True, val
-        else:
-            return False, "Значение температуры должно быть от 0 до 1"
+        temp = float(value)
+        if 0 <= temp <= 1:
+            return True, temp
+        return False, "Температура должна быть от 0 до 1"
     except ValueError:
-        return False, "Температура должна быть числом"
+        return False, "Некорректное значение температуры"
 
-def validate_max_tokens(value: Any) -> Tuple[bool, int | str]:
+def validate_max_tokens(value: Any) -> Tuple[bool, int]:
     """
-    Валидация максимального количества токенов.
+    Проверяет значение максимального количества токенов.
     
-    Args:
-        value: Значение для проверки
-        
     Returns:
-        Tuple[bool, Union[int, str]]: (успех, значение/сообщение об ошибке)
+        Tuple[bool, int]: (успех, значение/сообщение об ошибке)
     """
     try:
-        val = int(value)
-        if val >= 150:
-            return True, val
-        else:
-            return False, "Значение должно быть не менее 150 токенов"
+        tokens = int(value)
+        if tokens >= 150:
+            return True, tokens
+        return False, "Минимальное значение токенов: 150"
     except ValueError:
-        return False, "Количество токенов должно быть целым числом"
+        return False, "Некорректное значение токенов"
 
-def create_combined_image(text_prompt, image_url, style="default", size="1024x1024", quality="high", hdr=False):
-    """
-    Функция для генерации нового изображения на основе текстового и графического ввода.
-    Отправляет запрос к API, совместимому с OpenAI, с указанными параметрами.
-    """
-    api_url = "https://api.example.com/generate-image"  # Замените на реальный URL API
-    payload = {
-        "text_prompt": text_prompt,
-        "image_url": image_url,
-        "style": style,
-        "size": size,
-        "quality": quality,
-        "hdr": hdr
-    }
-    headers = {"Content-Type": "application/json"}
-    try:
-        response = requests.post(api_url, json=payload, headers=headers)
-        if response.status_code == 200:
-            logging.debug("Изображение успешно сгенерировано")
-            return response.json()
-        else:
-            logging.error("Ошибка генерации изображения: %s", response.text)
-            return None
-    except Exception as e:
-        logging.error("Ошибка в create_combined_image: %s", str(e))
-        return None
+async def log_handler_call(func):
+    """Декоратор для логирования вызовов обработчиков."""
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        if DEBUG:
+            user = update.effective_user
+            logger.debug(
+                f"Handler {func.__name__} called by user {user.id} ({user.username})"
+            )
+        return await func(update, context, *args, **kwargs)
+    return wrapper
 
-def load_json_file(file_path: str) -> Optional[Dict]:
+def format_settings_for_display(settings: dict) -> str:
     """
-    Загрузка JSON файла.
+    Форматирует настройки для отображения пользователю.
     
     Args:
-        file_path (str): Путь к файлу
-        
-    Returns:
-        Optional[Dict]: Загруженные данные или None при ошибке
-    """
-    try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            return json.load(file)
-    except Exception as e:
-        log_error('json_load', str(e))
-        return None
-
-def save_json_file(data: Dict, file_path: str) -> bool:
-    """
-    Сохранение данных в JSON файл.
+        settings: Словарь с настройками
     
-    Args:
-        data (Dict): Данные для сохранения
-        file_path (str): Путь к файлу
-        
     Returns:
-        bool: True если успешно, False при ошибке
+        str: Отформатированный текст настроек
     """
-    try:
-        with open(file_path, 'w', encoding='utf-8') as file:
-            json.dump(data, file, ensure_ascii=False, indent=4)
-        return True
-    except Exception as e:
-        log_error('json_save', str(e))
-        return False
-
-def ensure_directory(path: str) -> bool:
-    """
-    Проверка и создание директории, если она не существует.
+    text = "Текущие настройки:\n\n"
     
-    Args:
-        path (str): Путь к директории
-        
-    Returns:
-        bool: True если директория существует или создана, False при ошибке
-    """
-    try:
-        if not os.path.exists(path):
-            os.makedirs(path)
-        return True
-    except Exception as e:
-        log_error('directory_create', str(e))
-        return False
-
-def download_file(url: str, local_path: str) -> bool:
-    """
-    Загрузка файла по URL.
+    if 'text_settings' in settings:
+        text += "📝 Настройки текста:\n"
+        text += f"- Модель: {settings['text_settings']['model']}\n"
+        text += f"- Температура: {settings['text_settings']['temperature']}\n"
+        text += f"- Макс. токенов: {settings['text_settings']['max_tokens']}\n\n"
     
-    Args:
-        url (str): URL файла
-        local_path (str): Локальный путь для сохранения
-        
-    Returns:
-        bool: True если успешно, False при ошибке
-    """
-    try:
-        response = requests.get(url, stream=True)
-        if response.status_code == 200:
-            with open(local_path, 'wb') as file:
-                for chunk in response.iter_content(chunk_size=8192):
-                    file.write(chunk)
-            return True
-        return False
-    except Exception as e:
-        log_error('file_download', str(e))
-        return False 
+    if 'image_settings' in settings:
+        text += "🎨 Настройки изображений:\n"
+        text += f"- Модель: {settings['image_settings']['model']}\n"
+        text += f"- Размер: {settings['image_settings']['size']}\n"
+        text += f"- Качество: {settings['image_settings']['quality']}\n"
+        text += f"- Стиль: {settings['image_settings']['style']}\n"
+        text += f"- HDR: {'Вкл' if settings['image_settings']['hdr'] else 'Выкл'}\n"
+    
+    return text 

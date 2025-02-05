@@ -1,214 +1,162 @@
-import os
-from openai import OpenAI
 from telegram import Update
-from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-from settings import TextModelSettings, ImageModelSettings, VoiceModelSettings
-from handlers import handle_message, handle_callback, handle_command
-from media_handlers import MediaHandler
-from logger import logger, log_api_call, log_error
-from typing import Optional, Any
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    filters
+)
+from openai import OpenAI
+import os
+from loguru import logger
+from dotenv import load_dotenv
+from handlers import (
+    start_command,
+    help_command,
+    settings_command,
+    clear_command,
+    handle_text,
+    handle_image,
+    handle_settings_callback,
+    handle_text_model_settings,
+    handle_image_model_settings
+)
 
-class TelegramBot:
-    def __init__(self, token: str):
-        """
-        Инициализация бота с настройками и OpenAI клиентом.
-        
-        Args:
-            token (str): Токен Telegram бота
-        """
-        # Создаем приложение с базовыми настройками
-        self.application = (
-            Application.builder()
-            .token(token)
-            .concurrent_updates(True)
-            .build()
-        )
-        
+# Загрузка переменных окружения
+load_dotenv()
+
+# Включение/выключение режима отладки
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+
+class GPTBot:
+    def __init__(self):
+        """Инициализация бота."""
+        self.token = os.getenv('TELEGRAM_TOKEN')
+        if not self.token:
+            raise ValueError("Не указан токен Telegram бота")
+
         # Инициализация OpenAI клиента
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
+            raise ValueError("Не указан API ключ OpenAI")
+        
         self.openai_client = OpenAI(
-            api_key=os.getenv('OPENAI_API_KEY'),
-            base_url=os.getenv('OPENAI_API_BASE', 'https://api.openai.com/v1')
+            api_key=openai_api_key,
+            base_url=os.getenv('OPENAI_API_BASE', "https://api.openai.com/v1")
         )
-        
-        # Загрузка настроек
-        self.text_settings = TextModelSettings()
-        self.image_settings = ImageModelSettings()
-        self.voice_settings = VoiceModelSettings()
-        
-        # Инициализация обработчика медиа
-        self.media_handler = MediaHandler()
-        
-        # Регистрация обработчиков
-        self._setup_handlers()
 
-    def _setup_handlers(self):
-        """Настройка обработчиков команд и сообщений."""
-        # Команды
-        self.application.add_handler(CommandHandler("start", self._start_command))
-        self.application.add_handler(CommandHandler("settings", self._settings_command))
-        self.application.add_handler(CommandHandler("clear_history", self._clear_history_command))
-        
-        # Callback-запросы
-        self.application.add_handler(CallbackQueryHandler(self._button_callback))
-        
-        # Медиа-сообщения
-        self.application.add_handler(MessageHandler(filters.VOICE, self._handle_voice))
-        self.application.add_handler(MessageHandler(filters.PHOTO, self._handle_image))
-        
-        # Текстовые сообщения (должны обрабатываться последними)
-        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_message))
-
-    async def _start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик команды /start."""
-        if update and update.effective_chat:
-            await handle_command(update, context, 'start')
-
-    async def _settings_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик команды /settings."""
-        if update and update.effective_chat:
-            await handle_command(update, context, 'settings')
-
-    async def _clear_history_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик команды /clear_history."""
-        if update and update.effective_chat:
-            await handle_command(update, context, 'clear_history')
-
-    async def _button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик нажатий кнопок."""
-        if update and update.callback_query:
-            await handle_callback(update, context)
-
-    async def _handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик текстовых сообщений."""
-        if not update or not update.effective_chat:
-            return
-            
-        # Проверяем, не является ли это описанием для изображения
-        if context.user_data.get('image_processing'):
-            await self.media_handler.handle_image_with_text(update, context)
+        # Настройка логирования
+        if DEBUG:
+            logger.add("debug.log", rotation="500 MB", level="DEBUG")
         else:
-            await handle_message(update, context)
+            logger.add("production.log", rotation="500 MB", level="INFO")
 
-    async def _handle_voice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик голосовых сообщений."""
-        if update and update.effective_chat:
-            await self.media_handler.handle_voice(update, context)
-
-    async def _handle_image(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик изображений."""
-        if update and update.effective_chat:
-            await self.media_handler.handle_image(update, context)
-
-    async def stream_gpt_response(self, messages: list, chat_id: int, message_id: int, context: Any) -> None:
+    async def stream_chat_completion(self, messages, chat_id, message_id, context):
         """
-        Потоковая обработка ответа от GPT.
+        Отправка потокового ответа от модели GPT.
         
         Args:
-            messages (list): История сообщений
-            chat_id (int): ID чата
-            message_id (int): ID сообщения для обновления
-            context (Any): Контекст бота
+            messages: История сообщений
+            chat_id: ID чата
+            message_id: ID сообщения для обновления
+            context: Контекст бота
         """
         try:
-            log_api_call('OpenAI', 'stream_completion', model=self.text_settings.model)
-            
-            current_response = ""
-            last_update_length = 0
-            update_interval = 3
-            chunks_since_update = 0
-            
+            # Создаем потоковый запрос к API
             stream = self.openai_client.chat.completions.create(
-                model=self.text_settings.model,
+                model=os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo'),
                 messages=messages,
-                stream=True,
-                temperature=self.text_settings.temperature,
-                max_tokens=self.text_settings.max_tokens
+                stream=True
             )
 
+            # Буфер для накопления частей ответа
+            response_buffer = ""
+            
+            # Обрабатываем поток ответов
             for chunk in stream:
                 if chunk.choices[0].delta.content is not None:
-                    content = chunk.choices[0].delta.content
-                    current_response += content
-                    chunks_since_update += 1
-
-                    if chunks_since_update >= update_interval:
-                        try:
-                            await context.bot.edit_message_text(
-                                chat_id=chat_id,
-                                message_id=message_id,
-                                text=current_response,
-                                parse_mode=ParseMode.MARKDOWN
-                            )
-                            chunks_since_update = 0
-                            last_update_length = len(current_response)
-                        except Exception as e:
-                            log_error('telegram_update', str(e))
-
-            # Финальное обновление сообщения
-            if len(current_response) > last_update_length:
-                try:
-                    await context.bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=message_id,
-                        text=current_response,
-                        parse_mode=ParseMode.MARKDOWN
-                    )
+                    response_buffer += chunk.choices[0].delta.content
                     
-                    # Если включена голосовая озвучка, конвертируем ответ в голос
-                    if self.voice_settings.auto_voice_response:
-                        await self.media_handler.text_to_voice(
-                            current_response,
-                            chat_id,
-                            context
+                    # Обновляем сообщение каждые N символов или при специальных символах
+                    if len(response_buffer) >= 50 or '\n' in response_buffer:
+                        await context.bot.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=message_id,
+                            text=response_buffer
                         )
-                        
-                except Exception as e:
-                    log_error('telegram_final_update', str(e))
 
-        except Exception as e:
-            log_error('stream_gpt', str(e))
-            error_message = "Произошла ошибка при генерации ответа. Пожалуйста, попробуйте позже."
-            try:
+            # Отправляем оставшуюся часть ответа
+            if response_buffer:
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=message_id,
-                    text=error_message
-                )
-            except:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=error_message
+                    text=response_buffer
                 )
 
-    async def get_initial_response_message(self, chat_id: int, context: Any) -> Optional[int]:
+        except Exception as e:
+            logger.error(f"Ошибка при получении ответа от OpenAI: {e}")
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text="Произошла ошибка при получении ответа. Пожалуйста, попробуйте позже."
+            )
+
+    async def create_image(self, prompt, **kwargs):
         """
-        Отправка начального сообщения.
+        Создание изображения с помощью DALL-E.
         
         Args:
-            chat_id (int): ID чата
-            context (Any): Контекст бота
-            
+            prompt: Текстовое описание изображения
+            **kwargs: Дополнительные параметры (размер, качество и т.д.)
+        
         Returns:
-            Optional[int]: ID сообщения или None при ошибке
+            str: URL сгенерированного изображения
         """
         try:
-            message = await context.bot.send_message(
-                chat_id=chat_id,
-                text="Генерирую ответ..."
+            response = self.openai_client.images.generate(
+                model=kwargs.get('model', 'dall-e-3'),
+                prompt=prompt,
+                size=kwargs.get('size', '1024x1024'),
+                quality=kwargs.get('quality', 'standard'),
+                n=1
             )
-            return message.message_id
+            return response.data[0].url
         except Exception as e:
-            log_error('initial_message', str(e))
-            return None
+            logger.error(f"Ошибка при генерации изображения: {e}")
+            raise
 
-    async def run(self):
+    def run(self):
         """Запуск бота."""
         try:
-            logger.info("Бот запущен и ожидает сообщений...")
-            await self.application.initialize()  # Инициализация приложения
-            await self.application.start()
-            await self.application.run_polling(allowed_updates=Update.ALL_TYPES)
+            # Создаем приложение
+            application = Application.builder().token(self.token).build()
+
+            # Добавляем обработчики команд
+            application.add_handler(CommandHandler('start', start_command))
+            application.add_handler(CommandHandler('help', help_command))
+            application.add_handler(CommandHandler('settings', settings_command))
+            application.add_handler(CommandHandler('clear', clear_command))
+
+            # Добавляем обработчики сообщений
+            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+            application.add_handler(MessageHandler(filters.PHOTO, handle_image))
+
+            # Добавляем обработчики callback'ов
+            application.add_handler(CallbackQueryHandler(
+                handle_settings_callback,
+                pattern='^(text_settings|image_settings|clear_history|export_settings|import_settings|close_settings|back_to_main|confirm_.*|cancel_confirmation)$'
+            ))
+            application.add_handler(CallbackQueryHandler(
+                handle_text_model_settings,
+                pattern='^(change_text_model|set_text_model_.*)$'
+            ))
+            application.add_handler(CallbackQueryHandler(
+                handle_image_model_settings,
+                pattern='^(change_image_model|set_image_model_.*|change_size|set_size_.*|toggle_hdr)$'
+            ))
+
+            # Запускаем бота
+            logger.info("Бот запущен")
+            application.run_polling()
         except Exception as e:
-            logger.error(f"Ошибка при запуске бота: {str(e)}")
-            raise 
+            logger.error(f"Ошибка при запуске бота: {e}") 

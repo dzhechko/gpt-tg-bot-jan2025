@@ -1,5 +1,5 @@
 # Project Overview
-Gpt telegram bot which  works with text, images and voice for input/output and supports threads and streaming mode
+Gpt telegram bot which  works with text, images for input/output and supports threads and streaming mode
 
 # Core functionalities
 ## 0. Bot should be deployed on railway.app and should work in polling mode
@@ -21,8 +21,6 @@ the following parameters for images model:
 ### handlers for each image setting (base_url, model, size, quality, style, hdr)
 ### get_image_settings and update_image_settings methods
 
-## 6. There should be a settings panel, so one can edit 
-parameters for voice model
 
 ## 7. There should be an option to clear message history for a user
 ## 8. validation for user inputs

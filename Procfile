@@ -1,1 +1,1 @@
-web: . /opt/venv/bin/activate && exec python3.11 main.py 
+worker: python main.py 

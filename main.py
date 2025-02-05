@@ -1,78 +1,27 @@
+from bot import GPTBot
+from loguru import logger
 import os
-import asyncio
-import signal
 from dotenv import load_dotenv
-from logger import setup_logger
-from bot import TelegramBot
-import sys
 
 # Загрузка переменных окружения
 load_dotenv()
 
-# Инициализация логгера
-logger = setup_logger()
+# Включение/выключение режима отладки
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
-async def shutdown(bot=None):
-    """Корректное завершение работы бота."""
-    logger.info("Начало процедуры завершения работы...")
-    
-    if bot and bot.application:
-        try:
-            await bot.application.stop()
-            await bot.application.shutdown()
-        except Exception as e:
-            logger.error(f"Ошибка при остановке бота: {str(e)}")
-
-    logger.info("Завершение работы...")
-
-def handle_exception(loop, context):
-    """Обработка необработанных исключений."""
-    msg = context.get("exception", context["message"])
-    logger.error(f"Необработанное исключение: {msg}")
-
-async def main():
+def main():
     """
     Основная функция для запуска бота.
-    Инициализирует и запускает бота с настройками из переменных окружения.
+    Обрабатывает ошибки и обеспечивает логирование.
     """
-    bot = None
-    
     try:
-        # Получаем токен из переменных окружения
-        token = os.getenv('TELEGRAM_BOT_TOKEN')
-        if not token:
-            logger.error("Не найден токен бота. Убедитесь, что переменная TELEGRAM_BOT_TOKEN установлена.")
-            return 1
-
-        # Настройка обработки исключений
-        loop = asyncio.get_running_loop()
-        loop.set_exception_handler(handle_exception)
-
-        # Создаем и запускаем бота
-        bot = TelegramBot(token)
-        
-        # Настройка обработки сигналов
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(
-                sig,
-                lambda s=sig: asyncio.create_task(shutdown(bot))
-            )
-
-        # Запускаем бота
-        await bot.run()
-        return 0
-
+        # Инициализация и запуск бота
+        bot = GPTBot()
+        logger.info("Бот инициализирован успешно")
+        bot.run()
     except Exception as e:
-        logger.error(f"Ошибка при запуске бота: {str(e)}")
-        if bot:
-            await shutdown(bot)
-        return 1
+        logger.error(f"Критическая ошибка при запуске бота: {e}")
+        raise
 
-if __name__ == '__main__':
-    try:
-        sys.exit(asyncio.run(main()))
-    except KeyboardInterrupt:
-        logger.info("Бот остановлен пользователем")
-    except Exception as e:
-        logger.error(f"Критическая ошибка: {str(e)}")
-        sys.exit(1) 
+if __name__ == "__main__":
+    main() 

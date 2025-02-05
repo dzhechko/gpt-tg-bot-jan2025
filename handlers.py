@@ -1,158 +1,267 @@
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from loguru import logger
+import json
 import os
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import CallbackContext
-from logger import log_user_action, log_error
+from settings import SettingsManager
+from utils import (
+    create_settings_keyboard,
+    create_text_settings_keyboard,
+    create_image_settings_keyboard,
+    send_confirmation_dialog,
+    validate_temperature,
+    validate_max_tokens,
+    format_settings_for_display,
+    log_handler_call
+)
 
-# Словарь для хранения истории сообщений пользователей
-user_message_history = {}
+settings_manager = SettingsManager()
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
-async def handle_message(update: Update, context: CallbackContext) -> None:
-    """
-    Обработчик входящих текстовых сообщений.
-    """
-    try:
-        user_id = update.effective_user.id
-        chat_id = update.effective_chat.id
-        message_text = update.message.text
+# Базовые команды
+@log_handler_call
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик команды /start."""
+    user = update.effective_user
+    welcome_text = (
+        f"👋 Привет, {user.first_name}!\n\n"
+        "Я - GPT бот, который может помочь тебе с текстом и изображениями.\n"
+        "Используй следующие команды:\n"
+        "/help - показать справку\n"
+        "/settings - настройки бота\n"
+        "/clear - очистить историю сообщений"
+    )
+    await update.message.reply_text(welcome_text)
 
-        log_user_action(user_id, 'send_message', message=message_text)
+@log_handler_call
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик команды /help."""
+    help_text = (
+        "🤖 Основные команды:\n\n"
+        "📝 Работа с текстом:\n"
+        "- Просто отправьте мне текстовое сообщение\n"
+        "- Я отвечу вам, используя выбранную модель\n\n"
+        "🎨 Работа с изображениями:\n"
+        "- Отправьте изображение с описанием\n"
+        "- Или просто текст для генерации изображения\n\n"
+        "⚙️ Настройки:\n"
+        "/settings - открыть меню настроек\n"
+        "/clear - очистить историю сообщений\n\n"
+        "❓ Дополнительно:\n"
+        "- Поддерживаю работу в группах\n"
+        "- Можно настроить параметры моделей\n"
+        "- Историю можно экспортировать/импортировать"
+    )
+    await update.message.reply_text(help_text)
 
-        # Проверяем доступ пользователя
-        allowed_users = os.getenv('ALLOWED_USERS')
-        if allowed_users and str(user_id) not in allowed_users.split(','):
-            await update.message.reply_text(
-                "Извините, у вас нет доступа к этому боту."
-            )
-            return
+@log_handler_call
+async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик команды /settings."""
+    keyboard = create_settings_keyboard()
+    await update.message.reply_text(
+        "⚙️ Настройки бота\nВыберите категорию:",
+        reply_markup=keyboard
+    )
 
-        # Управление историей сообщений
-        if user_id not in user_message_history:
-            user_message_history[user_id] = []
+@log_handler_call
+async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик команды /clear."""
+    await send_confirmation_dialog(
+        update,
+        context,
+        "очистить историю сообщений",
+        "clear_history"
+    )
 
-        user_message_history[user_id].append({
-            "role": "user",
-            "content": message_text
-        })
-
-        # Ограничение истории
-        max_history = 10
-        if len(user_message_history[user_id]) > max_history * 2:
-            user_message_history[user_id] = user_message_history[user_id][-max_history * 2:]
-
-        # Получаем бота из контекста
-        bot = context.bot._bot
-
-        # Получаем начальное сообщение
-        message_id = await bot.get_initial_response_message(chat_id, context)
-        if message_id is None:
-            await update.message.reply_text(
-                "Произошла ошибка при инициализации ответа. Пожалуйста, попробуйте позже."
-            )
-            return
-
-        # Запускаем генерацию ответа
-        await bot.stream_gpt_response(
-            messages=user_message_history[user_id],
-            chat_id=chat_id,
-            message_id=message_id,
-            context=context
-        )
-
-    except Exception as e:
-        log_error('message_handler', str(e))
-        await update.message.reply_text(
-            "Произошла ошибка при обработке сообщения. Пожалуйста, попробуйте позже."
-        )
-
-async def handle_command(update: Update, context: CallbackContext, command: str) -> None:
-    """
-    Обработчик команд бота.
+# Обработчики текста и изображений
+@log_handler_call
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик текстовых сообщений."""
+    user_id = update.effective_user.id
+    settings = settings_manager.get_user_settings(user_id)
     
-    Args:
-        update (Update): Объект обновления Telegram
-        context (CallbackContext): Контекст
-        command (str): Имя команды
-    """
-    try:
-        if command == 'start':
-            await update.message.reply_text(
-                "Привет! Я бот, готов помочь. Используйте команду /settings для изменения параметров."
-            )
-        elif command == 'settings':
-            keyboard = [
-                [InlineKeyboardButton("Настройки текстовой модели", callback_data='text_settings')],
-                [InlineKeyboardButton("Настройки модели изображений", callback_data='image_settings')],
-                [InlineKeyboardButton("Настройки голосовой модели", callback_data='voice_settings')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(
-                "Выберите параметры для настройки:",
-                reply_markup=reply_markup
-            )
-        elif command == 'clear_history':
-            user_id = update.effective_user.id
-            clear_user_history(user_id)
-            await update.message.reply_text("История сообщений очищена.")
-    except Exception as e:
-        log_error('command_handler', str(e))
-        await update.message.reply_text(
-            "Произошла ошибка при выполнении команды. Пожалуйста, попробуйте позже."
-        )
+    # Добавляем сообщение в историю
+    settings.message_history.append({
+        "role": "user",
+        "content": update.message.text
+    })
+    
+    # TODO: Реализовать streaming ответ от модели
+    # Пока просто заглушка
+    await update.message.reply_text(
+        "Извините, функция обработки текста временно недоступна."
+    )
 
-async def handle_callback(update: Update, context: CallbackContext) -> None:
-    """
-    Обработчик callback-запросов от инлайн-кнопок.
-    """
-    try:
-        query = update.callback_query
-        await query.answer()
+@log_handler_call
+async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик изображений."""
+    user_id = update.effective_user.id
+    settings = settings_manager.get_user_settings(user_id)
+    
+    # Получаем изображение и подпись
+    image = update.message.photo[-1]
+    caption = update.message.caption or ""
+    
+    # TODO: Реализовать обработку изображений
+    # Пока просто заглушка
+    await update.message.reply_text(
+        "Извините, функция обработки изображений временно недоступна."
+    )
 
-        data = query.data
-        if data == 'text_settings':
-            bot = context.bot._bot
-            settings = bot.text_settings
-            await query.edit_message_text(
-                f"Настройки текстовой модели:\n"
-                f"1. URL: {settings.base_url}\n"
-                f"2. Модель: {settings.model}\n"
-                f"3. Температура: {settings.temperature}\n"
-                f"4. Max tokens: {settings.max_tokens}"
-            )
-        elif data == 'image_settings':
-            bot = context.bot._bot
-            settings = bot.image_settings
-            await query.edit_message_text(
-                f"Настройки модели изображений:\n"
-                f"1. URL: {settings.base_url}\n"
-                f"2. Модель: {settings.model}\n"
-                f"3. Размер: {settings.size}\n"
-                f"4. Качество: {settings.quality}\n"
-                f"5. Стиль: {settings.style}"
-            )
-        elif data == 'voice_settings':
-            bot = context.bot._bot
-            settings = bot.voice_settings
-            await query.edit_message_text(
-                f"Настройки голосовой модели:\n"
-                f"1. Язык: {settings.language}\n"
-                f"2. Акцент: {settings.accent}\n"
-                f"3. Скорость речи: {settings.speech_rate}"
-            )
-        else:
-            await query.edit_message_text("Неверный выбор.")
-    except Exception as e:
-        log_error('callback_handler', str(e))
+# Обработчики callback'ов
+@log_handler_call
+async def handle_settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик callback'ов настроек."""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    settings = settings_manager.get_user_settings(user_id)
+    
+    if query.data == "text_settings":
+        keyboard = create_text_settings_keyboard(settings.text_settings.dict())
         await query.edit_message_text(
-            "Произошла ошибка при обработке запроса. Пожалуйста, попробуйте позже."
+            "📝 Настройки текстовой модели:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data == "image_settings":
+        keyboard = create_image_settings_keyboard(settings.image_settings.dict())
+        await query.edit_message_text(
+            "🎨 Настройки модели изображений:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data == "clear_history":
+        await send_confirmation_dialog(
+            update,
+            context,
+            "очистить историю сообщений",
+            "clear_history"
+        )
+    
+    elif query.data == "export_settings":
+        settings_json = settings_manager.export_settings(user_id)
+        await context.bot.send_document(
+            chat_id=update.effective_chat.id,
+            document=settings_json.encode(),
+            filename=f"settings_{user_id}.json",
+            caption="📤 Ваши настройки"
+        )
+    
+    elif query.data == "import_settings":
+        await query.edit_message_text(
+            "📥 Отправьте файл с настройками в формате JSON"
+        )
+        context.user_data["waiting_for_settings"] = True
+    
+    elif query.data == "close_settings":
+        await query.delete_message()
+    
+    elif query.data == "back_to_main":
+        keyboard = create_settings_keyboard()
+        await query.edit_message_text(
+            "⚙️ Настройки бота\nВыберите категорию:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data.startswith("confirm_"):
+        action = query.data.split("_")[1]
+        if action == "clear_history":
+            settings_manager.clear_message_history(user_id)
+            await query.edit_message_text("🗑 История сообщений очищена")
+    
+    elif query.data == "cancel_confirmation":
+        keyboard = create_settings_keyboard()
+        await query.edit_message_text(
+            "⚙️ Настройки бота\nВыберите категорию:",
+            reply_markup=keyboard
         )
 
-def clear_user_history(user_id: int) -> None:
-    """
-    Очищает историю сообщений пользователя.
+# Обработчики изменения настроек
+@log_handler_call
+async def handle_text_model_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик изменения настроек текстовой модели."""
+    query = update.callback_query
+    await query.answer()
     
-    Args:
-        user_id (int): ID пользователя
-    """
-    if user_id in user_message_history:
-        user_message_history[user_id] = []
-        log_user_action(user_id, 'clear_history') 
+    user_id = update.effective_user.id
+    settings = settings_manager.get_user_settings(user_id)
+    
+    if query.data == "change_text_model":
+        models = settings.text_settings.available_models
+        buttons = [[InlineKeyboardButton(model, callback_data=f"set_text_model_{model}")] 
+                  for model in models]
+        buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="text_settings")])
+        keyboard = InlineKeyboardMarkup(buttons)
+        await query.edit_message_text(
+            "Выберите модель:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data.startswith("set_text_model_"):
+        model = query.data.replace("set_text_model_", "")
+        settings_manager.update_text_settings(user_id, model=model)
+        keyboard = create_text_settings_keyboard(settings.text_settings.dict())
+        await query.edit_message_text(
+            "📝 Настройки текстовой модели:",
+            reply_markup=keyboard
+        )
+
+@log_handler_call
+async def handle_image_model_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик изменения настроек модели изображений."""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    settings = settings_manager.get_user_settings(user_id)
+    
+    if query.data == "change_image_model":
+        models = settings.image_settings.available_models
+        buttons = [[InlineKeyboardButton(model, callback_data=f"set_image_model_{model}")] 
+                  for model in models]
+        buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="image_settings")])
+        keyboard = InlineKeyboardMarkup(buttons)
+        await query.edit_message_text(
+            "Выберите модель:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data.startswith("set_image_model_"):
+        model = query.data.replace("set_image_model_", "")
+        settings_manager.update_image_settings(user_id, model=model)
+        keyboard = create_image_settings_keyboard(settings.image_settings.dict())
+        await query.edit_message_text(
+            "🎨 Настройки модели изображений:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data == "change_size":
+        sizes = settings.image_settings.available_sizes
+        buttons = [[InlineKeyboardButton(size, callback_data=f"set_size_{size}")] 
+                  for size in sizes]
+        buttons.append([InlineKeyboardButton("🔙 Назад", callback_data="image_settings")])
+        keyboard = InlineKeyboardMarkup(buttons)
+        await query.edit_message_text(
+            "Выберите размер изображения:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data.startswith("set_size_"):
+        size = query.data.replace("set_size_", "")
+        settings_manager.update_image_settings(user_id, size=size)
+        keyboard = create_image_settings_keyboard(settings.image_settings.dict())
+        await query.edit_message_text(
+            "🎨 Настройки модели изображений:",
+            reply_markup=keyboard
+        )
+    
+    elif query.data == "toggle_hdr":
+        current_hdr = settings.image_settings.hdr
+        settings_manager.update_image_settings(user_id, hdr=not current_hdr)
+        keyboard = create_image_settings_keyboard(settings.image_settings.dict())
+        await query.edit_message_text(
+            "🎨 Настройки модели изображений:",
+            reply_markup=keyboard
+        ) 
