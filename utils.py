@@ -49,7 +49,7 @@ def check_user_access_decorator(func):
         user_id = update.effective_user.id
         
         # Список команд, доступных всем пользователям
-        public_commands = ['myid_command', 'help_command']
+        public_commands = ['myid_command', 'help_command', 'start_command']
         
         # Если это публичная команда, разрешаем доступ
         if func.__name__ in public_commands:
