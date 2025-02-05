@@ -204,7 +204,15 @@ class TelegramBot:
 
     async def run(self):
         """Запуск бота в режиме polling."""
-        await self.application.initialize()
-        await self.application.start()
-        await self.application.run_polling()
-        await self.application.stop() 
+        try:
+            await self.application.initialize()
+            await self.application.start()
+            logger.info("Бот запущен и ожидает сообщений...")
+            await self.application.run_polling(allowed_updates=Update.ALL_TYPES)
+        except Exception as e:
+            logger.error(f"Ошибка при запуске бота: {str(e)}")
+            raise
+        finally:
+            if self.application.running:
+                await self.application.stop()
+                await self.application.shutdown() 
