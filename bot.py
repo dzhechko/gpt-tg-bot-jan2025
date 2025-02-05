@@ -79,16 +79,20 @@ class GPTBot:
         self.application.add_handler(CommandHandler(['image', 'img'], handle_image_command))
 
         # Добавляем обработчики сообщений
-        self.application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
-            handle_custom_model_input,
+        self.application.add_handler(
+            MessageHandler(
+                filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+                handle_custom_model_input
+            ),
             group=0
-        ))
-        self.application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            handle_text,
+        )
+        self.application.add_handler(
+            MessageHandler(
+                filters.TEXT & ~filters.COMMAND,
+                handle_text
+            ),
             group=1
-        ))
+        )
         self.application.add_handler(MessageHandler(filters.PHOTO, handle_image))
 
         # Добавляем обработчики callback'ов
