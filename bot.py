@@ -23,7 +23,9 @@ from handlers import (
     handle_image_model_settings,
     show_current_settings_command,
     handle_image_command,
-    handle_custom_model_input
+    handle_custom_model_input,
+    handle_base_url_input,
+    handle_image_base_url_input
 )
 from settings import SettingsManager
 
@@ -88,10 +90,24 @@ class GPTBot:
         )
         self.application.add_handler(
             MessageHandler(
+                filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+                handle_base_url_input
+            ),
+            group=1
+        )
+        self.application.add_handler(
+            MessageHandler(
+                filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+                handle_image_base_url_input
+            ),
+            group=2
+        )
+        self.application.add_handler(
+            MessageHandler(
                 filters.TEXT & ~filters.COMMAND,
                 handle_text
             ),
-            group=1
+            group=3
         )
         self.application.add_handler(MessageHandler(filters.PHOTO, handle_image))
 
@@ -102,11 +118,11 @@ class GPTBot:
         ))
         self.application.add_handler(CallbackQueryHandler(
             handle_text_model_settings,
-            pattern='^(change_text_model|set_text_model_.*|change_temperature|set_temp_.*|change_max_tokens|set_tokens_.*)$'
+            pattern='^(change_text_model|set_text_model_.*|change_temperature|set_temp_.*|change_max_tokens|set_tokens_.*|change_base_url)$'
         ))
         self.application.add_handler(CallbackQueryHandler(
             handle_image_model_settings,
-            pattern='^(change_image_model|set_image_model_.*|change_size|set_size_.*|change_quality|set_quality_.*|change_style|set_style_.*|toggle_hdr)$'
+            pattern='^(change_image_model|set_image_model_.*|change_size|set_size_.*|change_quality|set_quality_.*|change_style|set_style_.*|toggle_hdr|change_image_base_url)$'
         ))
 
     async def _error_handler(self, update: Update, context):

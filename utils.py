@@ -40,9 +40,16 @@ def create_text_settings_keyboard(current_settings: dict) -> InlineKeyboardMarku
     current_model = current_settings.get('effective_model', current_settings.get('model', 'gpt-4o-mini'))
     current_temp = current_settings.get('temperature', 0.7)
     current_tokens = current_settings.get('max_tokens', 1000)
+    current_base_url = current_settings.get('base_url', 'https://api.openai.com/v1')
+    
+    # Сокращаем base_url для отображения, если он слишком длинный
+    display_base_url = current_base_url
+    if len(display_base_url) > 30:
+        display_base_url = display_base_url[:27] + "..."
     
     buttons = [
         [(f"🔄 Модель: {current_model} ✓", "change_text_model")],
+        [(f"🌐 Base URL: {display_base_url} ✓", "change_base_url")],
         [(f"🌡 Температура: {current_temp} ✓", "change_temperature")],
         [(f"📊 Макс. токенов: {current_tokens} ✓", "change_max_tokens")],
         [("🔙 Назад", "back_to_main"), ("❌ Закрыть", "close_settings")]
@@ -51,8 +58,15 @@ def create_text_settings_keyboard(current_settings: dict) -> InlineKeyboardMarku
 
 def create_image_settings_keyboard(current_settings: dict) -> InlineKeyboardMarkup:
     """Создает клавиатуру для настроек модели изображений."""
+    # Сокращаем base_url для отображения, если он слишком длинный
+    current_base_url = current_settings.get('base_url', 'https://api.openai.com/v1')
+    display_base_url = current_base_url
+    if len(display_base_url) > 30:
+        display_base_url = display_base_url[:27] + "..."
+    
     buttons = [
         [(f"🔄 Модель: {current_settings['model']} ✓", "change_image_model")],
+        [(f"🌐 Base URL: {display_base_url} ✓", "change_image_base_url")],
         [(f"📏 Размер: {current_settings['size']} ✓", "change_size")]
     ]
     
