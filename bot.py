@@ -26,7 +26,8 @@ from handlers import (
     handle_custom_model_input,
     handle_base_url_input,
     handle_image_base_url_input,
-    handle_settings_import
+    handle_settings_import,
+    myid_command
 )
 from settings import SettingsManager
 import asyncio
@@ -81,6 +82,7 @@ class GPTBot:
         self.application.add_handler(CommandHandler('clear', clear_command))
         self.application.add_handler(CommandHandler('current_settings', show_current_settings_command))
         self.application.add_handler(CommandHandler(['image', 'img'], handle_image_command))
+        self.application.add_handler(CommandHandler('myid', myid_command))
 
         # Добавляем обработчики сообщений
         self.application.add_handler(

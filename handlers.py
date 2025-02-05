@@ -12,14 +12,16 @@ from utils import (
     validate_temperature,
     validate_max_tokens,
     format_settings_for_display,
-    log_handler_call
+    log_handler_call,
+    create_menu_keyboard,
+    check_user_access_decorator
 )
 
 settings_manager = SettingsManager()
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 # Базовые команды
-@log_handler_call
+@check_user_access_decorator
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /start."""
     user = update.effective_user
@@ -30,11 +32,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "/help - показать справку\n"
         "/settings - настройки бота\n"
         "/current_settings - показать текущие настройки\n"
-        "/clear - очистить историю сообщений"
+        "/clear - очистить историю сообщений\n"
+        "/myid - показать ваш Telegram ID"
     )
     await update.message.reply_text(welcome_text)
 
-@log_handler_call
+@check_user_access_decorator
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /help."""
     help_text = (
@@ -50,15 +53,17 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "⚙️ Настройки и команды:\n"
         "/settings - открыть меню настроек\n"
         "/current_settings - показать текущие настройки\n"
-        "/clear - очистить историю сообщений\n\n"
+        "/clear - очистить историю сообщений\n"
+        "/myid - показать ваш Telegram ID (нужен для доступа к боту)\n\n"
         "❓ Дополнительно:\n"
         "- Поддерживаю работу в группах\n"
         "- Можно настроить параметры моделей\n"
-        "- Историю можно экспортировать/импортировать"
+        "- Историю можно экспортировать/импортировать\n"
+        "- Доступ к боту ограничен списком разрешенных пользователей"
     )
     await update.message.reply_text(help_text)
 
-@log_handler_call
+@check_user_access_decorator
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /settings."""
     keyboard = create_settings_keyboard()
@@ -67,7 +72,7 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         reply_markup=keyboard
     )
 
-@log_handler_call
+@check_user_access_decorator
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /clear."""
     await send_confirmation_dialog(
@@ -77,7 +82,7 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "clear_history"
     )
 
-@log_handler_call
+@check_user_access_decorator
 async def show_current_settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /current_settings."""
     user_id = update.effective_user.id
@@ -98,7 +103,7 @@ async def show_current_settings_command(update: Update, context: ContextTypes.DE
     await update.message.reply_text(text)
 
 # Обработчики текста и изображений
-@log_handler_call
+@check_user_access_decorator
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик текстовых сообщений."""
     user_id = update.effective_user.id
@@ -136,7 +141,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "Произошла ошибка при обработке сообщения. Пожалуйста, попробуйте позже."
         )
 
-@log_handler_call
+@check_user_access_decorator
 async def handle_image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команд /image и /img."""
     user_id = update.effective_user.id
@@ -188,7 +193,7 @@ async def handle_image_command(update: Update, context: ContextTypes.DEFAULT_TYP
             "Произошла ошибка при генерации изображения. Пожалуйста, попробуйте позже."
         )
 
-@log_handler_call
+@check_user_access_decorator
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик изображений."""
     user_id = update.effective_user.id
@@ -244,7 +249,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
 
 # Обработчики callback'ов
-@log_handler_call
+@check_user_access_decorator
 async def handle_settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик callback'ов настроек."""
     query = update.callback_query
@@ -314,7 +319,7 @@ async def handle_settings_callback(update: Update, context: ContextTypes.DEFAULT
         )
 
 # Обработчики изменения настроек
-@log_handler_call
+@check_user_access_decorator
 async def handle_text_model_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик изменения настроек текстовой модели."""
     query = update.callback_query
@@ -416,7 +421,7 @@ async def handle_text_model_settings(update: Update, context: ContextTypes.DEFAU
         )
 
 # Добавляем обработчик для пользовательского ввода модели
-@log_handler_call
+@check_user_access_decorator
 async def handle_custom_model_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик ввода пользовательской модели."""
     if not context.user_data.get("waiting_for_custom_model"):
@@ -452,7 +457,7 @@ async def handle_custom_model_input(update: Update, context: ContextTypes.DEFAUL
         reply_markup=keyboard
     )
 
-@log_handler_call
+@check_user_access_decorator
 async def handle_image_model_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик изменения настроек модели изображений."""
     query = update.callback_query
@@ -571,7 +576,7 @@ async def handle_image_model_settings(update: Update, context: ContextTypes.DEFA
         )
 
 # Добавляем обработчик для пользовательского ввода base_url для изображений
-@log_handler_call
+@check_user_access_decorator
 async def handle_image_base_url_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик ввода base_url для модели изображений."""
     if not context.user_data.get("waiting_for_image_base_url"):
@@ -612,7 +617,7 @@ async def handle_image_base_url_input(update: Update, context: ContextTypes.DEFA
     )
 
 # Добавляем обработчик для пользовательского ввода base_url
-@log_handler_call
+@check_user_access_decorator
 async def handle_base_url_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик ввода base_url для текстовой модели."""
     if not context.user_data.get("waiting_for_base_url"):
@@ -653,7 +658,7 @@ async def handle_base_url_input(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 # Добавляем обработчик для импорта настроек из JSON файла
-@log_handler_call
+@check_user_access_decorator
 async def handle_settings_import(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик импорта настроек из JSON файла."""
     if not context.user_data.get("waiting_for_settings"):
@@ -709,3 +714,14 @@ async def handle_settings_import(update: Update, context: ContextTypes.DEFAULT_T
     finally:
         # Сбрасываем состояние ожидания
         context.user_data["waiting_for_settings"] = False 
+
+@check_user_access_decorator
+async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Показывает Telegram ID пользователя."""
+    user = update.effective_user
+    await update.message.reply_text(
+        f"👤 Ваш Telegram ID: `{user.id}`\n"
+        f"Username: @{user.username}\n"
+        f"Имя: {user.first_name}",
+        parse_mode='Markdown'
+    ) 

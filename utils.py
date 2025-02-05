@@ -7,6 +7,42 @@ import os
 
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
+def check_user_access(user_id: int) -> bool:
+    """
+    Проверяет, имеет ли пользователь доступ к боту.
+    
+    Args:
+        user_id: ID пользователя Telegram
+    
+    Returns:
+        bool: True если пользователь имеет доступ, False в противном случае
+    """
+    allowed_users = os.getenv('ALLOWED_USERS', '').strip()
+    
+    # Если список разрешенных пользователей пуст, разрешаем доступ всем
+    if not allowed_users:
+        return True
+    
+    # Преобразуем строку с ID в список чисел
+    allowed_ids = [int(uid.strip()) for uid in allowed_users.split(',') if uid.strip().isdigit()]
+    
+    # Проверяем наличие ID пользователя в списке разрешенных
+    return user_id in allowed_ids
+
+def check_user_access_decorator(func):
+    """Декоратор для проверки доступа пользователя к командам бота."""
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user_id = update.effective_user.id
+        if check_user_access(user_id):
+            return await func(update, context, *args, **kwargs)
+        else:
+            logger.warning(f"Попытка несанкционированного доступа от пользователя {user_id}")
+            await update.message.reply_text(
+                "⛔️ У вас нет доступа к этому боту. Пожалуйста, свяжитесь с администратором."
+            )
+            return None
+    return wrapper
+
 def create_menu_keyboard(buttons: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup:
     """
     Создает клавиатуру из списка кнопок.
