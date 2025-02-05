@@ -55,11 +55,9 @@ class GPTBot:
         else:
             logger.add("production.log", rotation="500 MB", level="INFO")
 
-        # Создаем Telegram бота
-        self.telegram_bot = Bot(token=self.token)
-        
-        # Создаем приложение
+        # Создаем приложение и получаем бота из него
         self.application = Application.builder().token(self.token).build()
+        self.telegram_bot = self.application.bot
         
         # Регистрируем обработчики
         self._setup_handlers()
@@ -195,7 +193,7 @@ class GPTBot:
             
             # Запускаем бота
             logger.info("Бот запущен")
-            self.application.run_polling()
+            self.application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
         except Exception as e:
             logger.error(f"Ошибка при запуске бота: {e}")
             raise 
