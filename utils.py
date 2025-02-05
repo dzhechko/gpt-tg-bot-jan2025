@@ -48,10 +48,10 @@ def create_text_settings_keyboard(current_settings: dict) -> InlineKeyboardMarku
         display_base_url = display_base_url[:27] + "..."
     
     buttons = [
-        [(f"🔄 Модель: {current_model} ✓", "change_text_model")],
-        [(f"🌐 Base URL: {display_base_url} ✓", "change_base_url")],
-        [(f"🌡 Температура: {current_temp} ✓", "change_temperature")],
-        [(f"📊 Макс. токенов: {current_tokens} ✓", "change_max_tokens")],
+        [(f"🔄 Модель: {current_model}", "change_text_model")],
+        [(f"🌐 Base URL: {display_base_url}", "change_base_url")],
+        [(f"🌡 Температура: {current_temp}", "change_temperature")],
+        [(f"📊 Макс. токенов: {current_tokens}", "change_max_tokens")],
         [("🔙 Назад", "back_to_main"), ("❌ Закрыть", "close_settings")]
     ]
     return create_menu_keyboard(buttons)
@@ -65,22 +65,22 @@ def create_image_settings_keyboard(current_settings: dict) -> InlineKeyboardMark
         display_base_url = display_base_url[:27] + "..."
     
     buttons = [
-        [(f"🔄 Модель: {current_settings['model']} ✓", "change_image_model")],
-        [(f"🌐 Base URL: {display_base_url} ✓", "change_image_base_url")],
-        [(f"📏 Размер: {current_settings['size']} ✓", "change_size")]
+        [(f"🔄 Модель: {current_settings['model']}", "change_image_model")],
+        [(f"🌐 Base URL: {display_base_url}", "change_image_base_url")],
+        [(f"📏 Размер: {current_settings['size']}", "change_size")]
     ]
     
     # Добавляем кнопку качества только если модель поддерживает разные качества
     if len(current_settings.get('available_qualities', [])) > 1:
-        buttons.append([(f"✨ Качество: {current_settings['quality']} ✓", "change_quality")])
+        buttons.append([(f"✨ Качество: {current_settings['quality']}", "change_quality")])
     
     # Добавляем кнопку стиля только если модель поддерживает стили
     if current_settings.get('available_styles', []):
-        buttons.append([(f"🎨 Стиль: {current_settings['style']} ✓", "change_style")])
+        buttons.append([(f"🎨 Стиль: {current_settings['style']}", "change_style")])
     
     # Добавляем кнопку HDR только если модель поддерживает HDR
     if current_settings.get('supports_hdr', False):
-        hdr_status = 'Вкл ✓' if current_settings['hdr'] else 'Выкл ✓'
+        hdr_status = 'Вкл' if current_settings['hdr'] else 'Выкл'
         buttons.append([(f"HDR: {hdr_status}", "toggle_hdr")])
     
     buttons.append([("🔙 Назад", "back_to_main"), ("❌ Закрыть", "close_settings")])
